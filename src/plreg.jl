@@ -37,7 +37,7 @@ function deviance{T<:FP}(pl::PLregFit{T},nlp::Vector{T})
     sqsum(resid)
 end
 
-function gpinc(pl::PLregFit)
+function gpinc{T<:FP}(pl::PLregFit{T})
     m = pl.m; (n,nl,nnl) = size(m); Aphi = mmd(m); B = pl.B; r = pl.resid
     lin = 1:nl; lpars = sub(pl.pars,lin)
     for k in 1:nnl gemv!('N',1.,sub(Aphi,:,:,k),lpars,0.,sub(B,:,k)) end
