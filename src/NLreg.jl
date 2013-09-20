@@ -19,6 +19,7 @@ module NLreg
 
     typealias FP FloatingPoint
 
+    include("nlreg.jl")
     include("plreg.jl")
     include("models.jl")
 

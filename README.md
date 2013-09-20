@@ -9,7 +9,7 @@ expression) are expressed as types that inherit from the `PLregMod`
 abstract type.  A instance of a model type is created from the values
 of any covariates in the model.
 
-## Example - the Michaelis-Menten model for enzyme kinetics
+## Example - a Michaelis-Menten fit
 
 In the
 [Michaelis-Menten model](http://en.wikipedia.org/wiki/Michaelis-Menten_kinetics)
@@ -52,4 +52,48 @@ The deviance (residual sum of squares) at an initial value, `K = 0.06`
 is evaluated as is the Golub-Pereyra increment, providing a new value
 of `K` at which the (profiled) deviance is reduced.  This process can
 be continued to convergence.
+
+## Creating a PLregMod type
+
+A `PLregMod` type a model matrix, usually called `MM`, for the
+conditionally linear parameters, the three-dimensional Jacobian array,
+usually called `MMD`, with each face corresponding to the partial
+derivative of `MM` with respect to one of the nonlinear parameters,
+and the values of any covariates needed to evaluate the model.  There
+must be a method for `newpar`, which updates both arrays for a new value
+of the nonlinear parameters, and a method for `pnames`.
+
+For the Michaelis-Menten model these are
+```julia
+immutable MicMen{T<:Float64} <: PLregMod{T}
+    x::Vector{T}
+    MM::Matrix{T}
+    MMD::Array{T,3}
+end
+MicMen{T<:Float64}(x::Vector{T}) = (n = length(x); MicMen(x, Array(T,n,1), Array(T,n,1,1)))
+pnames(m::MicMen) = ["Vm", "K"]
+
+function newpar{T<:Float64}(m::MicMen{T},K::T)
+    x = m.x; MM = m.MM; MMD = m.MMD
+    for i in 1:length(x)
+        xi = x[i]
+        denom = K + xi
+        MMD[i,1,1] = -(MM[i,1] =  xi/denom)/denom
+    end
+    MM
+end
+function newpar{T<:Float64}(m::MicMen{T},nlp::Vector{T})
+    length(nlp) == 1 ? newpar(m,nlp[1]) : error("length(nlp) should be 1")
+end
+```
+
+A `MicMen` object contains the vector of concentrations, the model
+matrix and its Jacobian.  If the vector of concentrations is of length
+`n` then the model matrix is of size `n` by `1` and the Jacobian is
+of size `n` by `1` by `1`.  When a new value of `K` becomes available
+the model matrix is evaluated as `x./(K+x)` and the Jacobian as
+`-x./abs2(K+x)`.  An explicit loop is used here to avoid allocation of
+temporaries, although this is probably not necessary in any reasonable
+size of data set.
+
 
