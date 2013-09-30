@@ -1,12 +1,12 @@
 module NLreg
 
     using DataFrames, NumericExtensions
-    using Base.LinAlg.BLAS: gemv!, trsm!, trsv!, syrk!
+    using Base.LinAlg.BLAS: gemv!, trmm!, trsm!, trsv!, syrk!
     using Base.LinAlg.LAPACK: gemqrt!,geqrt3!, potri!, potrf!, potrs!
     using Base.LinAlg.CHOLMOD: CholmodSparse!, CholmodSparse, CholmodFactor
     using Stats: StatisticalModel
 
-    import Base: size, show
+    import Base: Triangular, copy, size, show
     import Distributions: fit
     import GLM: deviance
     import Stats: coef, coeftable, confint, stderr, vcov, residuals, model_response, predict
@@ -19,13 +19,15 @@ module NLreg
         NonlinearLS,
         PLregFit,
         PLregMod,
-        PopPK,
+        SimplePopPK,
         logsd1,
 
         gnfit,
         gpinc,
         initpars,
         pnames,
+        pnls!,
+        prss!,
         updtmu!,
         updtMM!
 
