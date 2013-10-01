@@ -2,12 +2,50 @@
 
 [![Build Status](https://travis-ci.org/dmbates/NLreg.jl.png)](https://travis-ci.org/dmbates/NLreg.jl)
 
-In this [Julia](http://julialang.org) package nonlinear regression
-models are formulated as Julia types.  Partially linear models (those
-models with some parameters that occur linearly in the model
-expression) are expressed as types that inherit from the `PLregMod`
-abstract type.  A instance of a model type is created from the values
-of any covariates in the model.
+In this [Julia](http://julialang.org) package nonlinear regression models are formulated as Julia types that inherit from `NLregMod`.
+A simple example is the predicted concentration in a 1 compartment model with a single bolus dose at time 0.
+```jl
+conc = exp(logV) * exp(-exp(logK)*t)
+```
+where `logV` and `logK` are the logarithms of the volume of distribution and `K` is the elimination rate constant and `t` is the time of the measurement.
+
+The `logsd1` type represents this model and the data to which it is to be fit.
+The fields of this type are `t`, the vector of times at which samples are drawn, `y`, the vector of measured concentrations, `mu` the mean responses at the current parameter values, `resid` the residuals at the current parameter values, and `tgrad`, the transpose of the gradient matrix.
+The external constructors for this model allow it to be specified from `t` and `y` or in a Formula/Data specification.
+
+A nonlinear regression model must provide methods for `pnames`, the parameter names, `updtmu`, update the mean response, residuals and `tgrad` from new parameter values, and `initpars`, determine initial parameter estimates from the data.
+
+```jl
+julia> using DataFrames, NLreg, Stats
+
+julia> const sd1 = within(readtable(Pkg.dir("NLreg","data","sd1.csv.gz")),:(ID = pool(ID)));
+
+julia> nl = NonlinearLS(logsd1(:(CONC ~ TIME), sd1))
+Model fit by nonlinear least squares to 580 observations
+
+2x4 DataFrame:
+        parameter estimate    stderr  t_value
+[1,]       "logV" 0.133559 0.0433655  3.07985
+[2,]       "logK" -1.40385 0.0823891 -17.0392
+
+Residual sum of squares at estimates = 110.59728690764713
+Residual standard error = 0.43742975097431563 on 578 degrees of freedom
+```
+
+## Plans for the near future
+
+- Nonlinear mixed-effects models fit using the Laplace approximation to the log-likelihood
+
+- Specification of partially linear models
+
+- Composite models consisting of a parameter transformation and a nonlinear model.
+
+## Partially linear models (this used to work but is now broken)
+
+Partially linear models (those models with some parameters that occur
+linearly in the model expression) are expressed as types that inherit
+from the `PLregMod` abstract type.  A instance of a model type is
+created from the values of any covariates in the model.
 
 ## Example - a Michaelis-Menten fit
 

@@ -135,9 +135,6 @@ function updtmu!{T<:FP}(m::logsd1{T}, pars::Matrix{T}, inds::Vector)
     rss
 end
 
-size(m::logsd1) = size(m.tgrad)
-size(m::logsd1,args...) = size(m.tgrad,args...)
-
 function initpars{T<:FP}(m::logsd1{T})
     (n = length(m.t)) < 2 && return [zero(T),-one(T)]
     cc = hcat(ones(n),m.t)\log(m.y)

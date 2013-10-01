@@ -4,13 +4,14 @@ module NLreg
     using Base.LinAlg.BLAS: gemv!, trmm!, trsm!, trsv!, syrk!
     using Base.LinAlg.LAPACK: gemqrt!,geqrt3!, potri!, potrf!, potrs!
     using Base.LinAlg.CHOLMOD: CholmodSparse!, CholmodSparse, CholmodFactor
-    using Stats: StatisticalModel
+    using Stats: StatisticalModel, RegressionModel
 
     import Base: Triangular, copy, size, show
     import Distributions: fit
     import GLM: deviance
-    import Stats: coef, coeftable, confint, stderr, vcov, residuals, model_response, predict
     import NumericExtensions: evaluate, result_type
+    import Stats: coef, coeftable, confint, loglikelihood, nobs, stderr, vcov,
+                  residuals, model_response, predict
 
     export                              # types
         AsympReg,                       # Asymptotic regression model

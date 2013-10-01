@@ -2,11 +2,11 @@ type SimplePopPK{T<:FP} <: StatisticalModel
     m::NLregMod{T}
     inds::Vector
     lambda::AbstractMatrix{T}
-    RX::Cholesky{T}
     L::Vector{Matrix{T}}  # should this be a 3-D array?
     beta::Vector{T}       # fixed-effects parameter vector
     u::Matrix{T}          # spherical random-effects values
     delu::Matrix{T}       # increment in the PNLS algorithm
+    b::Matrix{T}
     phi::Matrix{T}      # parameter matrix - phi := beta + lambda * (u + fac*delu)
 end
 function SimplePopPK{T<:FP}(m::NLregMod{T},inds::Vector,lambda::AbstractMatrix{T},beta::Vector{T})
@@ -16,7 +16,7 @@ function SimplePopPK{T<:FP}(m::NLregMod{T},inds::Vector,lambda::AbstractMatrix{T
     size(lambda) == (p,p) || error("size(lambda) = $(size(lambda)) should be $((p,p))")
     L = Matrix{T}[eye(T,p) for i in 1:ni]
     u = zeros(T,(p,ni))
-    SimplePopPK(m,inds,lambda,cholfact(eye(T,p)),L,beta,u,copy(u),similar(u))
+    SimplePopPK(m,inds,lambda,cholfact(eye(T,p)),L,beta,u,copy(u),similar(u),similar(u))
 end
 ## ToDo Add an external constructor using Formula/Data
 
@@ -26,12 +26,13 @@ u2b!{T<:FP}(lambda::Triangular{T},u::Matrix{T}) = trmm!('L','L','N','N',1.,lambd
 
 ## penalized residual sum of squares
 function prss!{T<:FP}(pp::SimplePopPK{T},fac::T)
-    phi = pp.phi
-    copy!(phi,pp.u)
-    fma!(phi,pp.delu,fac)             # evaluate u + fac*delu in phi
-    ssu = sqsum(phi)
-    broadcast!(+,u2b!(pp.lambda,phi),pp.beta) # phi := beta + lambda * (u + fac*delu)
-    updtmu!(pp.m,phi,pp.inds) + ssu
+    b = pp.b                            # random effects on original scale
+    copy!(b,pp.u)                       # initialize with u
+    fma!(u,pp.delu,fac)                 # add fac*delu
+    ssu = sqsum(phi)                    # record squared length of u + fac(delu)
+    u2b!(pp.lambda,b)                   # convert to b scale
+    phi = pp.phi                        # phi := beta + b
+    updtmu!(pp.m,map!(Add,pp.phi,b,pp.beta),pp.inds) + ssu     # rss + penalty
 end
 
 ## logdet of L, the Cholesky factor

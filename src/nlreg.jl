@@ -1,6 +1,9 @@
 abstract NLregMod{T<:FP}
 
-type NonlinearLS{T<:FP} <: StatisticalModel            # nonlinear least squares problems
+size(m::NLregMod) = size(m.tgrad)
+size(m::NLregMod,args...) = size(m.tgrad,args...)
+
+type NonlinearLS{T<:FP} <: RegressionModel # nonlinear least squares fits
     m::NLregMod{T}
     pars::Vector{T}
     incr::Vector{T}
@@ -51,17 +54,37 @@ function gnfit(nl::NonlinearLS;verbose=false) # Gauss-Newton nonlinear least squ
     nl
 end
 
+size(nl::NonlinearLS) = size(nl.m)
+size(nl::NonlinearLS,args...) = size(nl.m,args...)
 
-function show(io::IO, nl::NonlinearLS)
+function vcov{T<:FP}(nl::NonlinearLS{T})
+    p,n = size(nl)
+    deviance(nl)/convert(T,n-p) * symmetrize!(potri!('U', copy(nl.ch.UL))[1], 'U')
+end
+
+stderr(nl::NonlinearLS) = sqrt(diag(vcov(nl)))
+
+coef(nl::NonlinearLS) = copy(nl.pars)
+
+nobs(nl::NonlinearLS) = size(nl,2)
+
+pnames(nl::NonlinearLS) = pnames(nl.m)
+
+deviance(nl::NonlinearLS) = nl.rss
+
+function coeftable(nl::NonlinearLS)
+    pars = coef(nl); std = stderr(nl)
+    DataFrame(parameter=pnames(nl), estimate=pars, stderr=std, t_value=pars ./ std)
+end
+    
+function show{T<:FP}(io::IO, nl::NonlinearLS{T})
     gnfit(nl)
-    p,n = size(nl.m)
-    s2 = nl.rss/float(n-p)
-    varcov = s2 * symmetrize!(potri!('U', copy(nl.ch.UL))[1], 'U')
-    stderr = sqrt(diag(varcov))
-    t_vals = nl.pars./stderr
+    p,n = size(nl)
+    s2 = deviance(nl)/convert(T,n-p)
+    std = stderr(nl)
+    pars = coef(nl)
     println(io, "Model fit by nonlinear least squares to $n observations\n")
-    println(io, "Parameter names:", pnames(nl.m)')
-    println(io, DataFrame(parameter=nl.pars,stderr=stderr,t_value=nl.pars./stderr))
+    println(io, coeftable(nl))
     println("Residual sum of squares at estimates = $(nl.rss)")
     println("Residual standard error = $(sqrt(s2)) on $(n-p) degrees of freedom")
 end
