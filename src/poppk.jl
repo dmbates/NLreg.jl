@@ -16,7 +16,7 @@ function SimplePopPK{T<:FP}(m::NLregMod{T},inds::Vector,lambda::AbstractMatrix{T
     size(lambda) == (p,p) || error("size(lambda) = $(size(lambda)) should be $((p,p))")
     L = Matrix{T}[eye(T,p) for i in 1:ni]
     u = zeros(T,(p,ni))
-    SimplePopPK(m,inds,lambda,cholfact(eye(T,p)),L,beta,u,copy(u),similar(u),similar(u))
+    SimplePopPK(m,inds,lambda,L,beta,u,copy(u),similar(u),similar(u))
 end
 ## ToDo Add an external constructor using Formula/Data
 
@@ -26,14 +26,15 @@ u2b!{T<:FP}(lambda::Triangular{T},u::Matrix{T}) = trmm!('L','L','N','N',1.,lambd
 
 ## penalized residual sum of squares
 function prss!{T<:FP}(pp::SimplePopPK{T},fac::T)
-    b = pp.b                            # random effects on original scale
-    copy!(b,pp.u)                       # initialize with u
-    fma!(u,pp.delu,fac)                 # add fac*delu
-    ssu = sqsum(phi)                    # record squared length of u + fac(delu)
-    u2b!(pp.lambda,b)                   # convert to b scale
-    phi = pp.phi                        # phi := beta + b
-    updtmu!(pp.m,map!(Add,pp.phi,b,pp.beta),pp.inds) + ssu     # rss + penalty
+    b = pp.b                  # random effects on original scale
+    copy!(b,pp.u)             # initialize with u
+    fma!(b,pp.delu,fac)       # add fac*delu
+    ssu = sqsum(b)            # record squared length of u + fac(delu)
+    NLreg.u2b!(pp.lambda,b)   # convert to b scale
+    updtmu!(pp.m,broadcast!(+,pp.phi,b,pp.beta),pp.inds) + ssu # rss + penalty
 end
+
+residuals(pp::SimplePopPK) = pp.m.resid
 
 ## logdet of L, the Cholesky factor
 function ldL2{T<:FP}(m::Matrix{T})
@@ -45,6 +46,19 @@ function ldL2{T<:FP}(pp::SimplePopPK{T})
     dd = zero(T); L = pp.L
     for i in 1:length(L) dd += ldL2(L[i]) end
     dd
+end
+
+function updtL!{T<:FP}(pp::SimplePopPK{T})
+    m = pp.m; u = pp.u; L = pp.L; ee = eye(T,size(L[1],1))
+    mm = NLreg.u2b!(pp.lambda,copy(m.tgrad)) # multiply transposed gradient by lambda
+    rr = residuals(pp.m); nn = rle(pp.inds)[1]; offset = 0
+    for i in 1:length(L)
+        ni = nn[i]; ii = offset+(1:nn[i]); offset += ni; g = sub(mm,:,ii); ui = sub(u,:,i)
+        gemv!('N',1.,g,sub(rr,ii),0.,ui)
+        ## Don't need to check for singularity in potrf! result b/c adding I
+        potrs!('L',potrf!('L',syrk!('L','N',1.,g,1.,copy!(L[i],ee)))[1],ui)
+    end
+    pp
 end
 
 ## Determine the conditional mode of the random effects using penalized nonlinear least squares
