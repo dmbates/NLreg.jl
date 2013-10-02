@@ -2,6 +2,9 @@ abstract NLregMod{T<:FP}
 
 size(m::NLregMod) = size(m.tgrad)
 size(m::NLregMod,args...) = size(m.tgrad,args...)
+## default methods for all NLregMod objects
+residuals(m::NLregMod) = m.resid
+model_response(m::NLregMod) = m.y
 
 type NonlinearLS{T<:FP} <: RegressionModel # nonlinear least squares fits
     m::NLregMod{T}

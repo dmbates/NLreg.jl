@@ -11,7 +11,7 @@ module NLreg
     import GLM: deviance
     import NumericExtensions: evaluate, result_type
     import Stats: coef, coeftable, confint, loglikelihood, nobs, stderr, vcov,
-                  residuals, model_response, predict
+                  model_response, predict, residuals, rle
 
     export                              # types
         AsympReg,                       # Asymptotic regression model

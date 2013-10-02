@@ -30,7 +30,7 @@ function prss!{T<:FP}(pp::SimplePopPK{T},fac::T)
     copy!(b,pp.u)             # initialize with u
     fma!(b,pp.delu,fac)       # add fac*delu
     ssu = sqsum(b)            # record squared length of u + fac(delu)
-    NLreg.u2b!(pp.lambda,b)   # convert to b scale
+    u2b!(pp.lambda,b)         # convert to b scale
     updtmu!(pp.m,broadcast!(+,pp.phi,b,pp.beta),pp.inds) + ssu # rss + penalty
 end
 
@@ -50,8 +50,8 @@ end
 
 function updtL!{T<:FP}(pp::SimplePopPK{T})
     m = pp.m; u = pp.u; L = pp.L; ee = eye(T,size(L[1],1))
-    mm = NLreg.u2b!(pp.lambda,copy(m.tgrad)) # multiply transposed gradient by lambda
-    rr = residuals(pp.m); nn = rle(pp.inds)[1]; offset = 0
+    mm = u2b!(pp.lambda,copy(m.tgrad)) # multiply transposed gradient by lambda
+    rr = residuals(m); nn = rle(pp.inds)[2]; offset = 0
     for i in 1:length(L)
         ni = nn[i]; ii = offset+(1:nn[i]); offset += ni; g = sub(mm,:,ii); ui = sub(u,:,i)
         gemv!('N',1.,g,sub(rr,ii),0.,ui)
