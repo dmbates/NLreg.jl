@@ -14,23 +14,25 @@ module NLreg
                   model_response, predict, residuals, rle
 
     export                              # types
-        AsympReg,                       # Asymptotic regression model
-        MicMen,                         # Michaelis-Menten model
-        NLregMod,
-        NonlinearLS,
-        PLregFit,
-        PLregMod,
-        SimplePopPK,
-        logsd1,
+        AsympReg,      # Asymptotic regression model
+        MicMen,        # Michaelis-Menten model
+        NLregMod,      # Nonlinear regression model abstract type
+        NonlinearLS,   # Nonlinear least squares fit
+        PLregFit,      # Partially linear regression model fit
+        PLregMod,      # Partially linear regression model
+        SimplePopPK,   # Simple population PK model
+        logsd1,        # 1-compartment, single bolus dose model with logged parameters
 
-        gnfit,
-        gpinc,
-        initpars,
-        pnames,
-        pnls!,
-        prss!,
-        updtmu!,
-        updtMM!
+        gnfit,         # nonlinear least squares by Gauss-Newton
+        gpinc,         # Golub-Pereyra increment
+        incr!,         # increment the spherical random effects
+        initpars,      # create initial values for the parameters
+        pnames,        # names of parameters in a model
+        pnls!,         # penalized nonlinear least squares fit
+        prss!,         # penalized rss for b = lambda * (u + fac*delu)
+        updtMM!,       # update the model matrix in a PLregMod
+        updtL!,        # update L and solve for delu
+        updtmu!        # update mu and tgrad
 
     typealias FP FloatingPoint
 

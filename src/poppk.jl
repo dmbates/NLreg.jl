@@ -1,22 +1,24 @@
 type SimplePopPK{T<:FP} <: StatisticalModel
     m::NLregMod{T}
     inds::Vector
+    nrep::Vector
     lambda::AbstractMatrix{T}
     L::Vector{Matrix{T}}  # should this be a 3-D array?
     beta::Vector{T}       # fixed-effects parameter vector
     u::Matrix{T}          # spherical random-effects values
     delu::Matrix{T}       # increment in the PNLS algorithm
-    b::Matrix{T}
-    phi::Matrix{T}      # parameter matrix - phi := beta + lambda * (u + fac*delu)
+    b::Matrix{T}          # random effects on original scale
+    phi::Matrix{T}        # phi := beta + lambda * (u + fac*delu)
 end
 function SimplePopPK{T<:FP}(m::NLregMod{T},inds::Vector,lambda::AbstractMatrix{T},beta::Vector{T})
     p,n = size(m); np = n*p; ui = unique(inds); ni = length(ui)
     isperm(ui) || error("unique(inds) should be a permutation")
-    length(inds) == n || error("length(inds) = $(length(inds)) should be $n")
+    length(inds) == n || error("length(inds) = $(length(inds)), should be $n")
+    nrep = rle(inds)[2]; length(nrep) == ni || error("similar inds must be adjacent")
     size(lambda) == (p,p) || error("size(lambda) = $(size(lambda)) should be $((p,p))")
     L = Matrix{T}[eye(T,p) for i in 1:ni]
     u = zeros(T,(p,ni))
-    SimplePopPK(m,inds,lambda,L,beta,u,copy(u),similar(u),similar(u))
+    SimplePopPK(m,inds,nrep,lambda,L,beta,u,copy(u),similar(u),similar(u))
 end
 ## ToDo Add an external constructor using Formula/Data
 
@@ -33,6 +35,7 @@ function prss!{T<:FP}(pp::SimplePopPK{T},fac::T)
     u2b!(pp.lambda,b)         # convert to b scale
     updtmu!(pp.m,broadcast!(+,pp.phi,b,pp.beta),pp.inds) + ssu # rss + penalty
 end
+prss!{T<:FP}(pp::SimplePopPK{T}) = prss!(pp,zero(T))
 
 residuals(pp::SimplePopPK) = pp.m.resid
 
@@ -48,17 +51,26 @@ function ldL2{T<:FP}(pp::SimplePopPK{T})
     dd
 end
 
+## Update the L array using the current values of tgrad
 function updtL!{T<:FP}(pp::SimplePopPK{T})
-    m = pp.m; u = pp.u; L = pp.L; ee = eye(T,size(L[1],1))
+    m = pp.m; delu = pp.delu; L = pp.L; ee = eye(T,size(L[1],1))
     mm = u2b!(pp.lambda,copy(m.tgrad)) # multiply transposed gradient by lambda
-    rr = residuals(m); nn = rle(pp.inds)[2]; offset = 0
+    rr = residuals(m); nn = pp.nrep; offset = 0
     for i in 1:length(L)
-        ni = nn[i]; ii = offset+(1:nn[i]); offset += ni; g = sub(mm,:,ii); ui = sub(u,:,i)
-        gemv!('N',1.,g,sub(rr,ii),0.,ui)
+        ni = nn[i]; ii = offset+(1:nn[i]); offset += ni;
+        g = sub(mm,:,ii); du = sub(delu,:,i)
+        gemv!('N',1.,g,sub(rr,ii),0.,du)
         ## Don't need to check for singularity in potrf! result b/c adding I
-        potrs!('L',potrf!('L',syrk!('L','N',1.,g,1.,copy!(L[i],ee)))[1],ui)
+        potrs!('L',potrf!('L',syrk!('L','N',1.,g,1.,copy!(L[i],ee)))[1],du)
     end
-    pp
+    prss!(pp,one(T))                    # evaluate prss with full increment
+end
+
+## increment the spherical random effects as pp.u += pp.delu * fac and zero out pp.delu
+function incr!{T<:FP}(pp::SimplePopPK{T}, fac::T)
+    fma!(pp.u,pp.delu,fac)
+    fill!(pp.delu,zero(T))
+    prss!(pp)
 end
 
 ## Determine the conditional mode of the random effects using penalized nonlinear least squares
