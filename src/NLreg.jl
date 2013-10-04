@@ -20,8 +20,8 @@ module NLreg
         NonlinearLS,   # Nonlinear least squares fit
         PLregFit,      # Partially linear regression model fit
         PLregMod,      # Partially linear regression model
-        SimplePopPK,   # Simple population PK model
-        logsd1,        # 1-compartment, single bolus dose model with logged parameters
+        SimpleNLMM,    # Simple population nonlinear mixed-effects model
+        Logsd1,        # 1-compartment, single bolus dose model with logged parameters
 
         gnfit,         # nonlinear least squares by Gauss-Newton
         gpinc,         # Golub-Pereyra increment

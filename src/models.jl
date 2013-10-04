@@ -77,51 +77,51 @@ function updtMM!{T<:Float64}(m::Exp1{T},nlp::Matrix{T},MM::Matrix{T},MMD::Array{
     MM
 end
 
-immutable logsd1{T<:FP} <: NLregMod{T}
+immutable Logsd1{T<:FP} <: NLregMod{T}
     t::Vector{T}
     y::Vector{T}
     mu::Vector{T}
     resid::Vector{T}
     tgrad::Matrix{T}
 end
-function logsd1{T<:FP}(t::Vector{T},y::Vector{T})
+function Logsd1{T<:FP}(t::Vector{T},y::Vector{T})
     n = length(t); length(y) == n || error("Dimension mismatch")
-    logsd1(t,y,similar(t),similar(t),Array(T,(2,n)))
+    Logsd1(t,y,similar(t),similar(t),Array(T,(2,n)))
 end
-logsd1{T<:FP}(t::DataArray{T,1},y::DataArray{T,1}) = logsd1(vector(t),vector(y))
-function logsd1(f::Formula,dat::AbstractDataFrame)
+Logsd1{T<:FP}(t::DataArray{T,1},y::DataArray{T,1}) = Logsd1(vector(t),vector(y))
+function Logsd1(f::Formula,dat::AbstractDataFrame)
     mf = ModelFrame(f,dat)
     mm = ModelMatrix(mf)
-    logsd1(mm.m[:,2],model_response(mf))
+    Logsd1(mm.m[:,2],model_response(mf))
 end
-logsd1(ex::Expr,dat::AbstractDataFrame) = logsd1(Formula(ex),dat)
+Logsd1(ex::Expr,dat::AbstractDataFrame) = Logsd1(Formula(ex),dat)
 
-function logsd1f{T<:FP}(V::T,K::T,ti::T,mu::UnsafeVectorView{T},tg::UnsafeVectorView{T})
+function Logsd1f{T<:FP}(V::T,K::T,ti::T,mu::UnsafeVectorView{T},tg::UnsafeVectorView{T})
     tg[2] = -ti*K*(tg[1] = mu[1] = mm = V*exp(-K*ti))
     mm
 end
 
-function updtmu!{T<:FP}(m::logsd1{T}, pars::Vector{T})
+function updtmu!{T<:FP}(m::Logsd1{T}, pars::Vector{T})
     V = exp(pars[1]); K = exp(pars[2]); t = m.t; mu = m.mu; tgrad = m.tgrad;
     y = m.y; r = m.resid; rss = zero(T)
     for i in 1:length(t)
-        ri = r[i] = y[i] - logsd1f(V,K,t[i],unsafe_view(mu,i:i),unsafe_view(tgrad,:,i))
+        ri = r[i] = y[i] - Logsd1f(V,K,t[i],unsafe_view(mu,i:i),unsafe_view(tgrad,:,i))
         rss += abs2(ri)
     end
     rss
 end
-function updtmu!{T<:FP}(m::logsd1{T}, p::Matrix{T})
+function updtmu!{T<:FP}(m::Logsd1{T}, p::Matrix{T})
     t = m.t; mu = m.mu; tgrad = m.tgrad; rss = zero(T)
     y = m.y; r = m.resid
     size(pars) == size(tgrad) || error("Dimension mismatch")
     for i in 1:length(t)
-        ri = r[i] = y[i] - logsd1f(exp(p[1,i]),exp(p[2,i]),t[i],
+        ri = r[i] = y[i] - Logsd1f(exp(p[1,i]),exp(p[2,i]),t[i],
                                    unsafe_view(mu,i:i),unsafe_view(tgrad,:,i))
         rss += abs2(ri)
     end
     rss
 end
-function updtmu!{T<:FP}(m::logsd1{T}, pars::Matrix{T}, inds::Vector)
+function updtmu!{T<:FP}(m::Logsd1{T}, pars::Matrix{T}, inds::Vector)
     t = m.t; mu = m.mu; tgrad = m.tgrad; k,n = size(tgrad); rss = zero(T)
     length(inds) == n && size(pars,1) == k || error("Dimension mismatch")
     y = m.y; resid = m.resid; ii = 0; V = 0.; K = 0.
@@ -129,16 +129,16 @@ function updtmu!{T<:FP}(m::logsd1{T}, pars::Matrix{T}, inds::Vector)
         if ii != inds[i]
             ii = inds[i]; V = exp(pars[1,ii]); K = exp(pars[2,ii])
         end
-        ri = resid[i] = y[i] - logsd1f(V,K,t[i],unsafe_view(mu,i:i),unsafe_view(tgrad,:,i))
+        ri = resid[i] = y[i] - Logsd1f(V,K,t[i],unsafe_view(mu,i:i),unsafe_view(tgrad,:,i))
         rss += abs2(ri)
     end
     rss
 end
 
-function initpars{T<:FP}(m::logsd1{T})
+function initpars{T<:FP}(m::Logsd1{T})
     (n = length(m.t)) < 2 && return [zero(T),-one(T)]
     cc = hcat(ones(n),m.t)\log(m.y)
     cc[2] < 0. ? [cc[1],log(-cc[2])] : [cc[1],-one(T)]
 end
 
-pnames(m::logsd1) = ["logV","logK"]
+pnames(m::Logsd1) = ["logV","logK"]
