@@ -34,7 +34,7 @@ function gnfit(nl::NonlinearLS;verbose=false) # Gauss-Newton nonlinear least squ
             info == 0 || error("Singular gradient matrix at pars = $(pars')")
             ## solve in place for the Gauss-Newton increment - done in two stages
             ## to be able to evaluate the orthogonality convergence criterion
-            cvg = sqsum(trsv!('U','T','N',UL,gemv!('N',1.,tg,r,0.,incr)))/rss
+            cvg = sumsq(trsv!('U','T','N',UL,gemv!('N',1.,tg,r,0.,incr)))/rss
             verbose && println("Iteration: ",i,", rss = ",rss,", cvg = ",cvg," at ",pars')
             trsv!('U','N','N',UL,incr)
             verbose && println("Increment: ", incr')

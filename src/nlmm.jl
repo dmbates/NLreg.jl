@@ -26,7 +26,6 @@ function SimpleNLMM{T<:FP}(m::NLregMod{T},inds::Vector,lambda::AbstractMatrix{T}
     u = zeros(T,(p,ni))
     SimpleNLMM(m,inds,nrep,lambda,L,beta,u,copy(u),similar(u),similar(u),1,30,convert(T,0.5^9),convert(T,1e-8))
 end
-## ToDo Add an external constructor using Formula/Data
 
 ## Multiply u by lambda in place creating the b values
 u2b!{T<:FP}(lambda::Diagonal{T},u::Matrix{T}) = scale!(lambda.diag,u)
@@ -37,7 +36,7 @@ function prss!{T<:FP}(nm::SimpleNLMM{T},fac::T)
     b = nm.b                  # random effects on original scale
     copy!(b,nm.u)             # initialize with u
     fma!(b,nm.delu,fac)       # add fac*delu
-    ssu = sqsum(b)            # record squared length of u + fac(delu)
+    ssu = sumsq(b)            # record squared length of u + fac(delu)
     u2b!(nm.lambda,b)         # convert to b scale
     updtmu!(nm.m,broadcast!(+,nm.phi,b,nm.beta),nm.inds) + ssu # rss + penalty
 end
@@ -97,7 +96,7 @@ function pnls!{T<:FP}(nm::SimpleNLMM{T})
         (conv = (oldprss - newprss)/newprss) < nm.tolsqr && break
         oldprss = newprss
     end
-    conv >= nm.tolsqr && error("Failure to converge in ", nm.mxpnlsit, " iterations")
+    conv >= nm.tolsqr && error("Failure to converge in ", nm.mxpnls, " iterations")
     deviance(nm)
 end
 
@@ -136,14 +135,16 @@ end
     
 function fit(nm::NLMM, verbose=false)
     th = theta(nm); nth = length(th)
-    pars = [nm.beta,th];
-    opt = Opt(:LN_BOBYQA, length(pars))
+    pars = [nm.beta,th]
+    opt = Opt(:LN_NELDERMEAD, length(pars))
     ftol_abs!(opt, 1e-6)    # criterion on deviance changes
     xtol_abs!(opt, 1e-6)    # criterion on all parameter value changes
     lower_bounds!(opt, lowerbd(nm))    
     function obj(x::Vector{Float64}, g::Vector{Float64})
         length(g) == 0 || error("gradient evaluations are not provided")
-        pnls!(setpars!(nm,x))
+        res = pnls!(setpars!(nm,x))
+        print("$res: "); show(x);println()
+        res
     end
     if verbose
         count = 0
@@ -158,7 +159,7 @@ function fit(nm::NLMM, verbose=false)
     else
         min_objective!(opt, obj)
     end
-    fmin, xmin, ret = optimize(opt, pars)
+    fmin, xmin, ret = optimize!(opt, pars)
     if verbose println(ret) end
     nm
 end

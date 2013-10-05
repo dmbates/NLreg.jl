@@ -43,7 +43,7 @@ function deviance{T<:FP}(pl::PLregFit{T},nlp::Vector{T})
     trsv!('U','N','N',sub(vs,lin,lin),copy!(sub(pars,lin),sub(c,lin))) # lin. pars
     fill!(sub(resid, lin), zero(T))
     gemqrt!('L','N',vs,tr,resid)        # residuals
-    sqsum(resid)
+    sumsq(resid)
 end
 
 function gpinc{T<:FP}(pl::PLregFit{T})
