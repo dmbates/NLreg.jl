@@ -19,21 +19,14 @@ function MicMenf!{T<:FP}(K::T,xi::T,MM::UnsafeVectorView{T},MMD::UnsafeMatrixVie
 end
 
 pnames(m::MicMen) = ["Vm", "K"]
-size(m::MicMen) = (length(m.x),1,1)
+size(m::MicMen) = (2,length(m.x),1)
 
 function updtMM!{T<:FP}(m::MicMen{T},K::T)
-    x = m.x; MM = m.MM; MMD = m.MMD
+    x = m.x; MM = m.MM; MMD = m.MMD; MtM = m.MtM
     for i in 1:length(x)
         MicMenf!(K,x[i],unsafe_view(MM,:,i),unsafe_view(MMD,:,:,i))
     end
-    tg
-end
-function updtmu!{T<:FP}(m::MicMen{T},K::T)
-    Vm = Array(T,1); MtM = m.MtM; MM = m.MM; mu = m.mu
-    _,info = potrf!('U',syrk!('U','N',one(T),m.MM,zero(T),MtM))
-    info == 0 || error("Singular model matrix at K = $K")
-    potrs!('U',MtM,Vm)
-    sqdiffsum!(resid,resid,y,gemv!('T',one(T),MM,Vm,zero(T),mu),1)
+    MM
 end
 
 immutable AsympReg{T<:FP} <: PLregMod{T}

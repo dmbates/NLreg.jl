@@ -24,14 +24,22 @@ type PLregFit{T<:FP}
     MM::Matrix{T}
     MMD::Matrix{T}
 end
-function PLregFit{T<:FP}(m::PLregMod{T},y::Vector{T})
-    (n,nl,nnl) = size(m); length(y) == n || error("Dimension mismatch")
-    PLregFit(m, y, similar(y), similar(y), Array(T,nl + nnl),
+function PLinearLS{T<:FP}(m::PLregMod{T})
+    p,n,nnl = size(m)
+    PLinearLS(m, y, similar(y), similar(y), Array(T,nl + nnl),
              Array(T,nnl), Array(T,n,nl), Array(T,nl,nl), Array(T,n,nnl),
              Array(T,n,nl), Array(T,n,nl,nnl))
 end
-PLregFit{T<:FP}(m::PLregMod{T},y::DataArray{T,1}) = PLregFit(m,vector(c))
-PLregFit{T<:Integer}(m::PLregMod{T},y::DataArray{T,1}) = PLregFit(m,convert(Vector{T},vector(c)))
+PLinearLS{T<:FP}(m::PLregMod{T},y::DataArray{T,1}) = PLinearLS(m,vector(c))
+PLinearLS{T<:Integer}(m::PLregMod{T},y::DataArray{T,1}) = PLinearLS(m,convert(Vector{T},vector(c)))
+
+function updtmu!{T<:FP}(m::PLregMod{T},psi::T)
+    MM = updtMM!(m,psi); MMD = m.MMD; MtM = m.MtM; y = m.y
+    _,info = potrf!('U',syrk!('U','N',one(T),MM,zero(T),MtM))
+    info == 0 || error("Singular model matrix for conditionally linear parameters")
+    Vm = potrs!('U',MtM,gemv('N',one(T),MM,y))
+    sumsqdiff!(m.resid,y,gemv!('T',one(T),MM,Vm,zero(T),m.mu))
+end
 
 function deviance{T<:FP}(pl::PLregFit{T},nlp::Vector{T})
     m = pl.m; (n,nl,nnl) = size(m);

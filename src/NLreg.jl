@@ -1,7 +1,7 @@
 module NLreg
 
     using DataFrames, NumericExtensions, NLopt
-    using Base.LinAlg.BLAS: gemv!, trmm!, trsm!, trsv!, syrk!
+    using Base.LinAlg.BLAS: gemv, gemv!, trmm!, trsm!, trsv!, syrk!
     using Base.LinAlg.LAPACK: gemqrt!,geqrt3!, potri!, potrf!, potrs!
     using Base.LinAlg.CHOLMOD: CholmodSparse!, CholmodSparse, CholmodFactor
     using Stats: StatisticalModel, RegressionModel
