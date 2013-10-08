@@ -135,3 +135,63 @@ function initpars{T<:FP}(m::Logsd1{T})
 end
 
 pnames(m::Logsd1) = ["logV","logK"]
+
+immutable BolusSD1{T<:FP} <: NLregMod{T}
+    t::Vector{T}
+    y::Vector{T}
+    mu::Vector{T}
+    resid::Vector{T}
+    tgrad::Matrix{T}
+end
+function BolusSD1{T<:FP}(t::Vector{T},y::Vector{T})
+    n = length(t); length(y) == n || error("Dimension mismatch")
+    BolusSD1(t,y,similar(t),similar(t),Array(T,(2,n)))
+end
+BolusSD1{T<:FP}(t::DataArray{T,1},y::DataArray{T,1}) = BolusSD1(vector(t),vector(y))
+function BolusSD1(f::Formula,dat::AbstractDataFrame)
+    mf = ModelFrame(f,dat)
+    mm = ModelMatrix(mf)
+    BolusSD1(mm.m[:,2],model_response(mf))
+end
+BolusSD1(ex::Expr,dat::AbstractDataFrame) = BolusSD1(Formula(ex),dat)
+
+function BolusSD1f{T<:FP}(V::T,K::T,ti::T,mu::UnsafeVectorView{T},tg::UnsafeVectorView{T})
+    tg[2] = -ti*(mm = mu[1] = V*(tg[1] = exp(-K*ti)))
+    mm
+end
+
+function updtmu!{T<:FP}(m::BolusSD1{T}, pars::Vector{T})
+    V = pars[1]; K = pars[2]; t = m.t; mu = m.mu; tgrad = m.tgrad;
+    y = m.y; r = m.resid; rss = zero(T)
+    for i in 1:length(t)
+        ri = r[i] = y[i] - BolusSD1f(V,K,t[i],unsafe_view(mu,i:i),unsafe_view(tgrad,:,i))
+        rss += abs2(ri)
+    end
+    rss
+end
+function updtmu!{T<:FP}(m::BolusSD1{T}, p::Matrix{T})
+    t = m.t; mu = m.mu; tgrad = m.tgrad; rss = zero(T)
+    y = m.y; r = m.resid
+    size(pars) == size(tgrad) || error("Dimension mismatch")
+    for i in 1:length(t)
+        ri = r[i] = y[i] - BolusSD1f(p[1,i],p[2,i],t[i],
+                                     unsafe_view(mu,i:i),unsafe_view(tgrad,:,i))
+        rss += abs2(ri)
+    end
+    rss
+end
+function updtmu!{T<:FP}(m::BolusSD1{T}, pars::Matrix{T}, inds::Vector)
+    t = m.t; mu = m.mu; tgrad = m.tgrad; k,n = size(tgrad); rss = zero(T)
+    length(inds) == n && size(pars,1) == k || error("Dimension mismatch")
+    y = m.y; resid = m.resid; ii = 0; V = 0.; K = 0.
+    for i in 1:n
+        if ii != inds[i]
+            ii = inds[i]; V = pars[1,ii]; K = pars[2,ii]
+        end
+        ri = resid[i] = y[i] - BolusSD1f(V,K,t[i],unsafe_view(mu,i:i),unsafe_view(tgrad,:,i))
+        rss += abs2(ri)
+    end
+    rss
+end
+
+pnames(m::BolusSD1) = ["V","K"]

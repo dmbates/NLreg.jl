@@ -136,14 +136,13 @@ end
 function fit(nm::NLMM, verbose=false)
     th = theta(nm); nth = length(th)
     pars = [nm.beta,th]
-    opt = Opt(:LN_NELDERMEAD, length(pars))
+    opt = Opt(:LN_BOBYQA,length(pars))
     ftol_abs!(opt, 1e-6)    # criterion on deviance changes
     xtol_abs!(opt, 1e-6)    # criterion on all parameter value changes
-    lower_bounds!(opt, lowerbd(nm))    
+    lower_bounds!(opt, zeros(4)) # lowerbd(nm))    
     function obj(x::Vector{Float64}, g::Vector{Float64})
         length(g) == 0 || error("gradient evaluations are not provided")
         res = pnls!(setpars!(nm,x))
-        print("$res: "); show(x);println()
         res
     end
     if verbose
@@ -152,7 +151,10 @@ function fit(nm::NLMM, verbose=false)
             if length(g) > 0 error("gradient evaluations are not provided") end
             count += 1
             val = obj(x, g)
-            println("f_$count: $val, $x")
+            print("f_$count: $(round(val,5), [")
+            showcompact(x[1])
+            for i in 2:length(x) print(","); showcompact(x[i]) end
+            println("]")
             val
         end
         min_objective!(opt, vobj)
