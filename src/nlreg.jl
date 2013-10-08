@@ -88,6 +88,6 @@ function show{T<:FP}(io::IO, nl::NonlinearLS{T})
     pars = coef(nl)
     println(io, "Model fit by nonlinear least squares to $n observations\n")
     println(io, coeftable(nl))
-    println("Residual sum of squares at estimates = $(nl.rss)")
-    println("Residual standard error = $(sqrt(s2)) on $(n-p) degrees of freedom")
+    print("Residual sum of squares at estimates: "); showcompact(nl.rss); println()
+    print("Residual standard error = ");showcompact(sqrt(s2));println(" on $(n-p) degrees of freedom")
 end
