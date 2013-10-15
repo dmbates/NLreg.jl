@@ -195,3 +195,9 @@ function updtmu!{T<:FP}(m::BolusSD1{T}, pars::Matrix{T}, inds::Vector)
 end
 
 pnames(m::BolusSD1) = ["V","K"]
+
+function initpars{T<:FP}(m::BolusSD1{T})
+    (n = length(m.t)) < 2 && return [one(T),exp(-one(T))]
+    cc = hcat(ones(T,n),m.t)\log(m.y)
+    [exp(cc[1]),-cc[2]]
+end

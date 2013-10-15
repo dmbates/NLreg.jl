@@ -133,7 +133,7 @@ function setpars!{T<:FP}(nm::NLMM{T},pars::Vector{T})
     nm
 end
     
-function fit(nm::NLMM, verbose=false)
+function fit(nm::NLMM; verbose=false)
     th = theta(nm); nth = length(th)
     pars = [nm.beta,th]
     opt = Opt(:LN_BOBYQA,length(pars))
@@ -151,7 +151,7 @@ function fit(nm::NLMM, verbose=false)
             if length(g) > 0 error("gradient evaluations are not provided") end
             count += 1
             val = obj(x, g)
-            print("f_$count: $(round(val,5), [")
+            print("f_$count: $(round(val,5)), [")
             showcompact(x[1])
             for i in 2:length(x) print(","); showcompact(x[i]) end
             println("]")

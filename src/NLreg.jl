@@ -15,13 +15,14 @@ module NLreg
 
     export
         AsympReg,      # Asymptotic regression model
+        BolusSD1,      # 1-compartment, single bolus dose model
+        Logsd1,        # 1-compartment, single bolus dose model with logged parameters
         MicMen,        # Michaelis-Menten model
         NLregMod,      # Nonlinear regression model abstract type
         NonlinearLS,   # Nonlinear least squares fit
         PLregFit,      # Partially linear regression model fit
         PLregMod,      # Partially linear regression model
         SimpleNLMM,    # Simple population nonlinear mixed-effects model
-        Logsd1,        # 1-compartment, single bolus dose model with logged parameters
 
         deviance,      # Laplace approximation to the deviance of an NLMM
         gnfit,         # nonlinear least squares by Gauss-Newton
