@@ -29,10 +29,15 @@ function SimpleNLMM{T<:FP}(m::NLregMod{T},inds::Vector,
     SimpleNLMM(m,inds,nrep,lambda,L,beta,u,copy(u),similar(u),similar(u),
                1,30,convert(T,0.5^9),convert(T,1e-8))
 end
+function SimpleNLMM(nl::NonlinearLS,inds::Vector,lambda::AbstractMatrix)
+    SimpleNLMM(deepcopy(nl.m),inds,lambda,coef(nl))
+end
 
-## Multiply u by lambda in place creating the b values
-u2b!{T<:FP}(lambda::Diagonal{T},u::Matrix{T}) = scale!(lambda.diag,u)
-u2b!{T<:FP}(lambda::Triangular{T},u::Matrix{T}) = trmm!('L','L','N','N',1.,lambda,u)
+A_mul_B!(A::Diagonal,B::Matrix) = scale!(A.diag,B)
+At_mul_B!(A::Diagonal,B::Matrix)= scale!(A.diag,B)
+Ac_mul_B!(A::Diagonal,B::Matrix)= scale!(A.diag,B)
+A_mul_B!(A::Triangular,B::Matrix) = trmm!('L',A.uplo,'N',A.unitdiag,one(eltype(A)),A.UL,B)
+Ac_mul_B!(A::Triangular,B::Matrix) = trmm!('L',A.uplo,'T',A.unitdiag,one(eltype(A)),A.UL,B)
 
 ## penalized residual sum of squares
 function prss!{T<:FP}(nm::SimpleNLMM{T},fac::T)
@@ -40,7 +45,7 @@ function prss!{T<:FP}(nm::SimpleNLMM{T},fac::T)
     copy!(b,nm.u)             # initialize with u
     fma!(b,nm.delu,fac)       # add fac*delu
     ssu = sumsq(b)            # record squared length of u + fac(delu)
-    u2b!(nm.lambda,b)         # convert to b scale
+    A_mul_B!(nm.lambda,b)     # convert to b scale
     updtmu!(nm.m,broadcast!(+,nm.phi,b,nm.beta),nm.inds) + ssu # rss + penalty
 end
 prss!{T<:FP}(nm::SimpleNLMM{T}) = prss!(nm,zero(T))
@@ -58,7 +63,7 @@ ldL2{T<:FP}(nm::SimpleNLMM{T}) = sum(ldL2,nm.L)
 ## Update the L array using the current values of tgrad
 function updtL!{T<:FP}(nm::SimpleNLMM{T})
     m = nm.m; u = nm.u; delu = copy!(nm.delu,nm.u); L = nm.L; ee = eye(T,size(L[1],1))
-    mm = u2b!(nm.lambda,copy(m.tgrad)) # multiply transposed gradient by lambda
+    mm = nm.lambda' * m.tgrad
     rr = residuals(m); nn = nm.nrep; offset = 0
     for i in 1:length(L)
         ni = nn[i]; ii = offset+(1:nn[i]); offset += ni;
@@ -85,14 +90,16 @@ function deviance{T<:FP}(nm::SimpleNLMM{T})
 end
 
 ## Determine the conditional mode of the random effects using penalized nonlinear least squares
-function pnls!{T<:FP}(nm::SimpleNLMM{T})
-    fill!(nm.u,zero(T)); fill!(nm.delu,zero(T)) # start from a fixed position
+function pnls!{T<:FP}(nm::SimpleNLMM{T},u0::Matrix{T};verbose=false)
+    copy!(nm.u,u0); fill!(nm.delu,zero(T)) # start from a fixed position
     oldprss = prss!(nm,0.); conv = one(T);
     for i in 1:nm.mxpnls
         newprss = updtL!(nm); f = one(T)
+        verbose && @printf(" %12f, %12f\n", oldprss, newprss)
         while oldprss < newprss && f >= nm.minfac
             f /= convert(T,2)
             newprss = prss!(nm,f)
+            verbose && @printf("  f = %8e: %12f\n", f, newprss)
         end
         f < nm.minfac && error("Failure to reduce prss at u = ",nm.u)
         incr!(nm,f)
@@ -102,16 +109,17 @@ function pnls!{T<:FP}(nm::SimpleNLMM{T})
     conv >= nm.tolsqr && error("Failure to converge in ", nm.mxpnls, " iterations")
     deviance(nm)
 end
+pnls!{T<:FP}(nm::SimpleNLMM{T};verbose=true) = pnls!(nm, zeros(T,size(nm.u));verbose=verbose)
 
 theta(nm::NLMM) = theta(nm.lambda)
 theta(lambda::Diagonal) = lambda.diag
 function theta(m::Triangular)
-    n = size(m,1); v = Array(eltype(T),n*(n+1)>>1); pos = 0; UL = m.UL
+    n = size(m,1); v = Array(eltype(m),n*(n+1)>>1); pos = 0; UL = m.UL
     for j in 1:n, i in (m.uplo == 'L' ? (j:n) : (1:j)) v[pos += 1] = UL[i,j] end
     v
 end
 
-theta!{T}(lambda::Diagonal{T},th::Vector{T}) = lambda.diag = th
+theta!{T}(lambda::Diagonal{T},th::Vector{T}) = copy!(lambda.diag,th)
 function theta!{T}(m::Triangular{T},th::Vector{T})
     n = size(m,1); pos = 0; UL = m.UL
     length(th) == n*(n+1)>>1 || error("length(th) = $(length(th)), should be $(n*(n+1)/2)")
@@ -137,34 +145,36 @@ function setpars!{T<:FP}(nm::NLMM{T},pars::Vector{T})
 end
     
 function fit(nm::NLMM; verbose=false)
+    pnls!(nm; verbose=true)
+    u0 = copy(nm.u)
     th = theta(nm); nth = length(th)
     pars = [nm.beta,th]
-    opt = Opt(:LN_BOBYQA,length(pars))
-    ftol_abs!(opt, 1e-6)    # criterion on deviance changes
-    xtol_abs!(opt, 1e-6)    # criterion on all parameter value changes
-    lower_bounds!(opt, zeros(4)) # lowerbd(nm))    
+    o = Opt(:LN_BOBYQA,length(pars))
+    ftol_abs!(o, 1e-6)    # criterion on deviance changes
+    xtol_abs!(o, 1e-6)    # criterion on all parameter value changes
+    lower_bounds!(o, lowerbd(nm))
     function obj(x::Vector{Float64}, g::Vector{Float64})
         length(g) == 0 || error("gradient evaluations are not provided")
-        res = pnls!(setpars!(nm,x))
-        res
+        pnls!(setpars!(nm,x),u0;verbose=verbose)
     end
     if verbose
         count = 0
         function vobj(x::Vector{Float64}, g::Vector{Float64})
-            if length(g) > 0 error("gradient evaluations are not provided") end
             count += 1
-            val = obj(x, g)
+            length(g) == 0 || error("gradient evaluations are not provided")
+            val = pnls!(setpars!(nm,x),u0)
             print("f_$count: $(round(val,5)), [")
             showcompact(x[1])
             for i in 2:length(x) print(","); showcompact(x[i]) end
             println("]")
             val
         end
-        min_objective!(opt, vobj)
+        min_objective!(o, vobj)
     else
-        min_objective!(opt, obj)
+        min_objective!(o, obj)
     end
-    fmin, xmin, ret = optimize!(opt, pars)
-    if verbose println(ret) end
+    fmin, xmin, ret = optimize!(o, pars)
+    verbose && println(ret)
+    setpars!(nm,xmin)
     nm
 end

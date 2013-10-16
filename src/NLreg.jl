@@ -6,7 +6,7 @@ module NLreg
     using Base.LinAlg.CHOLMOD: CholmodSparse!, CholmodSparse, CholmodFactor
     using Stats: StatisticalModel, RegressionModel
 
-    import Base: Triangular, copy, size, show
+    import Base: A_mul_B!, Ac_mul_B!, At_mul_B!, Triangular, copy, size, show
     import Distributions: fit
     import GLM: deviance
     import NumericExtensions: evaluate, result_type
