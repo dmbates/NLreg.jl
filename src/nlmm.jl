@@ -2,29 +2,32 @@ abstract NLMM{T<:FP} <: StatisticalModel
 
 type SimpleNLMM{T<:FP} <: NLMM{T}
     m::NLregMod{T}
-    inds::Vector
-    nrep::Vector
-    lambda::AbstractMatrix{T}
-    L::Vector{Matrix{T}}  # should this be a 3-D array?
-    beta::Vector{T}       # fixed-effects parameter vector
-    u::Matrix{T}          # spherical random-effects values
-    delu::Matrix{T}       # increment in the PNLS algorithm
-    b::Matrix{T}          # random effects on original scale
-    phi::Matrix{T}        # phi := beta + lambda * (u + fac*delu)
-    nAGQ::Int             # number of quadrature points in adaptive Gauss-Hermite
-    mxpnls::Int           # maximum number of PNLS iterations
-    minfac::T
-    tolsqr::T
+    inds::Vector               # grouping factor indices
+    nrep::Vector               # run-length encoding of inds
+    lambda::AbstractMatrix{T}  # template block for Lambda
+    L::Vector{Matrix{T}}       # should this be a 3-D array?
+    beta::Vector{T}            # fixed-effects parameter vector
+    u::Matrix{T}               # spherical random-effects values
+    delu::Matrix{T}            # increment in the PNLS algorithm
+    b::Matrix{T}               # random effects on original scale
+    phi::Matrix{T}             # phi := beta + lambda * (u + fac*delu)
+    nAGQ::Int               # adaptive Gauss-Hermite quadrature points
+    mxpnls::Int             # maximum number of PNLS iterations
+    minfac::T               # minimum step factor in PNLS
+    tolsqr::T               # squared tolerance for orthogonality conv.crit.
 end
-function SimpleNLMM{T<:FP}(m::NLregMod{T},inds::Vector,lambda::AbstractMatrix{T},beta::Vector{T})
-    p,n = size(m); np = n*p; ui = unique(inds); ni = length(ui)
-    isperm(ui) || error("unique(inds) should be a permutation")
+function SimpleNLMM{T<:FP}(m::NLregMod{T},inds::Vector,
+                           lambda::AbstractMatrix{T},beta::Vector{T})
+    p,n = size(m); np = n*p; ui, nrep = rle(inds); ni = length(ui)
     length(inds) == n || error("length(inds) = $(length(inds)), should be $n")
-    nrep = rle(inds)[2]; length(nrep) == ni || error("similar inds must be adjacent")
-    size(lambda) == (p,p) || error("size(lambda) = $(size(lambda)) should be $((p,p))")
+    isperm(ui) ||
+        error("similar inds must be adjacent and unique(inds) a permutation")
+    size(lambda) == (p,p) ||
+        error("size(lambda) = $(size(lambda)) should be $((p,p))")
     L = Matrix{T}[eye(T,p) for i in 1:ni]
     u = zeros(T,(p,ni))
-    SimpleNLMM(m,inds,nrep,lambda,L,beta,u,copy(u),similar(u),similar(u),1,30,convert(T,0.5^9),convert(T,1e-8))
+    SimpleNLMM(m,inds,nrep,lambda,L,beta,u,copy(u),similar(u),similar(u),
+               1,30,convert(T,0.5^9),convert(T,1e-8))
 end
 
 ## Multiply u by lambda in place creating the b values
