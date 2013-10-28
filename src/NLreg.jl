@@ -6,11 +6,10 @@ module NLreg
     using Base.LinAlg.CHOLMOD: CholmodSparse!, CholmodSparse, CholmodFactor
     using Stats: StatisticalModel, RegressionModel
 
-    import Base: A_mul_B!, Ac_mul_B!, At_mul_B!, Triangular, copy, size, show
+    import Base: A_mul_B!, Ac_mul_B!, At_mul_B!, Triangular, copy, size, show, std
     import Distributions: fit
-    import GLM: deviance
     import NumericExtensions: evaluate, result_type
-    import Stats: coef, coeftable, confint, loglikelihood, nobs, stderr, vcov,
+    import Stats: coef, coeftable, confint, deviance, loglikelihood, nobs, stderr, vcov,
                   model_response, predict, residuals, rle
 
     export
@@ -22,6 +21,7 @@ module NLreg
         NonlinearLS,   # Nonlinear least squares fit
         PLregFit,      # Partially linear regression model fit
         PLregMod,      # Partially linear regression model
+        NLMM,          # Nonlinear mixed-effects model
         SimpleNLMM,    # Simple population nonlinear mixed-effects model
 
         deviance,      # Laplace approximation to the deviance of an NLMM

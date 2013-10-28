@@ -145,7 +145,7 @@ function setpars!{T<:FP}(nm::NLMM{T},pars::Vector{T})
 end
     
 function fit(nm::NLMM; verbose=false)
-    pnls!(nm; verbose=true)
+    pnls!(nm; verbose=verbose)
     u0 = copy(nm.u)
     th = theta(nm); nth = length(th)
     pars = [nm.beta,th]
@@ -177,4 +177,39 @@ function fit(nm::NLMM; verbose=false)
     verbose && println(ret)
     setpars!(nm,xmin)
     nm
+end
+
+pwrss(nm::NLMM) = sumsq(nm.m.resid) + sumsq(vec(nm.u))
+
+function scale(nm::NLMM, sqr=false)
+    m = nm.m; p,n = size(m); ssqr = pwrss(nm)/n
+    sqr ? ssqr : sqrt(ssqr)
+end
+
+std(nm::SimpleNLMM) = scale(nm) * [diag(nm.lambda),1.]
+
+function show(io::IO, m::SimpleNLMM)
+    fit(m); mm = m.m; p,n = size(mm)
+    mstr = m.nAGQ == 1 ? "Laplace approximation" : "adaptive Gauss-Hermite quadrature ($(m.nAGQ))"
+    @printf(io, "Simple, nonlinear mixed-effects model fit by %s\n", mstr)
+    oo = deviance(pp)
+    @printf(io, " logLik: %f, deviance: %f", -oo/2., oo)
+    println(io); println(io)
+
+    
+    @printf(io, " Variance components:\n                Variance    Std.Dev.\n")
+    stdm = std(m); fnms = vcat(pnames(mm),"Residual")
+    for i in 1:length(fnms)
+        si = stdm[i]
+        print(io, " ", rpad(fnms[i],12))
+        @printf(io, " %10f  %10f\n", abs2(si[1]), si[1])
+        for j in 2:length(si)
+            @printf(io, "             %10f  %10f\n", abs2(si[j]), si[j])
+        end
+    end
+    @printf(io," Number of obs: %d; levels of grouping factors: %d", n, size(pp.u,2))
+    println(io)
+    @printf(io,"\n  Fixed-effects parameters:\n")
+    tstrings = split(string(coeftable(m)),'\n')
+    for i in 2:p+2 print(io,tstrings[i]); print(io,"\n") end
 end
