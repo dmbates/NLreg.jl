@@ -39,6 +39,10 @@ Ac_mul_B!(A::Diagonal,B::Matrix)= scale!(A.diag,B)
 A_mul_B!(A::Triangular,B::Matrix) = trmm!('L',A.uplo,'N',A.unitdiag,one(eltype(A)),A.UL,B)
 Ac_mul_B!(A::Triangular,B::Matrix) = trmm!('L',A.uplo,'T',A.unitdiag,one(eltype(A)),A.UL,B)
 
+function coeftable(nm::SimpleNLMM)
+    CoefTable(DataFrame(Estimate=coef(nm)),pnames(nm.m))
+end
+    
 ## penalized residual sum of squares
 function prss!{T<:FP}(nm::SimpleNLMM{T},fac::T)
     b = nm.b                  # random effects on original scale
@@ -186,16 +190,13 @@ function scale(nm::NLMM, sqr=false)
     sqr ? ssqr : sqrt(ssqr)
 end
 
-std(nm::SimpleNLMM) = scale(nm) * [diag(nm.lambda),1.]
-
 function show(io::IO, m::SimpleNLMM)
     fit(m); mm = m.m; p,n = size(mm)
     mstr = m.nAGQ == 1 ? "Laplace approximation" : "adaptive Gauss-Hermite quadrature ($(m.nAGQ))"
-    @printf(io, "Simple, nonlinear mixed-effects model fit by %s\n", mstr)
-    oo = deviance(pp)
+    println(io, "Simple, nonlinear mixed-effects model fit by ", mstr)
+    oo = deviance(m)
     @printf(io, " logLik: %f, deviance: %f", -oo/2., oo)
     println(io); println(io)
-
     
     @printf(io, " Variance components:\n                Variance    Std.Dev.\n")
     stdm = std(m); fnms = vcat(pnames(mm),"Residual")
@@ -208,8 +209,18 @@ function show(io::IO, m::SimpleNLMM)
         end
     end
     @printf(io," Number of obs: %d; levels of grouping factors: %d", n, size(pp.u,2))
+    println(io); println(io)
+
+    println(io, "Fixed effects parameters:")
+    show(io, coeftable(nm))
     println(io)
-    @printf(io,"\n  Fixed-effects parameters:\n")
-    tstrings = split(string(coeftable(m)),'\n')
-    for i in 2:p+2 print(io,tstrings[i]); print(io,"\n") end
 end
+
+std(nm::SimpleNLMM) = scale(nm) * [diag(nm.lambda),1.]
+
+## stderr(nm::NLMM) = sqrt(diag(vcov(nm)))
+    
+## function vcov(nm::NLMM)
+##     p,n = size(nl)
+##     scale(nm,true) * symmetrize!(potri!('U', copy(nl.ch.UL))[1], 'U')
+## end
