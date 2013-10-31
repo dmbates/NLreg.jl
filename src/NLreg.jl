@@ -95,7 +95,7 @@ module NLreg
             for j in 1:nc
                 print(io, lpad(str[i,j],widths[j]))
             end
-            println()
+            println(io)
         end
     end
 

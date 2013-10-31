@@ -74,6 +74,7 @@ function gnfit(nl::NonlinearLS,verbose::Bool=false) # Gauss-Newton nonlinear lea
             pars += f * incr
             nl.rss = rss
         end
+        verbose && println()
         copy!(nl.pars,pars)
         cvg < tol || error("failure to converge in $(nl.mxiter) iterations")
         nl.fit = true

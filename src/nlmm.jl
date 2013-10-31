@@ -39,6 +39,8 @@ Ac_mul_B!(A::Diagonal,B::Matrix)= scale!(A.diag,B)
 A_mul_B!(A::Triangular,B::Matrix) = trmm!('L',A.uplo,'N',A.unitdiag,one(eltype(A)),A.UL,B)
 Ac_mul_B!(A::Triangular,B::Matrix) = trmm!('L',A.uplo,'T',A.unitdiag,one(eltype(A)),A.UL,B)
 
+coef(nm::NLMM) = copy(nm.beta)
+
 function coeftable(nm::SimpleNLMM)
     CoefTable(DataFrame(Estimate=coef(nm)),pnames(nm.m))
 end
@@ -208,11 +210,11 @@ function show(io::IO, m::SimpleNLMM)
             @printf(io, "             %10f  %10f\n", abs2(si[j]), si[j])
         end
     end
-    @printf(io," Number of obs: %d; levels of grouping factors: %d", n, size(pp.u,2))
+    @printf(io," Number of obs: %d; levels of grouping factors: %d", n, size(m.u,2))
     println(io); println(io)
 
     println(io, "Fixed effects parameters:")
-    show(io, coeftable(nm))
+    show(io, coeftable(m))
     println(io)
 end
 
