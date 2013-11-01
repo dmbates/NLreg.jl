@@ -1703,74 +1703,12 @@ init_mathjax();
 <div class="cell border-box-sizing code_cell vbox">
 <div class="input hbox">
 <div class="prompt input_prompt">
-In&nbsp;[1]:
+In&nbsp;[]:
 </div>
 <div class="input_area box-flex1">
 <div class="highlight"><pre><span class="n">using</span> <span class="n">DataFrames</span><span class="p">,</span><span class="n">NLreg</span>
-<span class="n">const</span> <span class="n">sd1</span> <span class="o">=</span> <span class="n">readtable</span><span class="p">(</span><span class="n">Pkg</span><span class="o">.</span><span class="n">dir</span><span class="p">(</span><span class="s">&quot;NLreg&quot;</span><span class="p">,</span><span class="s">&quot;data&quot;</span><span class="p">,</span><span class="s">&quot;sd1.csv.gz&quot;</span><span class="p">))</span>
+<span class="n">const</span> <span class="n">sd1</span> <span class="o">=</span> <span class="n">readtable</span><span class="p">(</span><span class="n">Pkg</span><span class="o">.</span><span class="n">dir</span><span class="p">(</span><span class="s">&quot;NLreg&quot;</span><span class="p">,</span><span class="s">&quot;data&quot;</span><span class="p">,</span><span class="s">&quot;sd1.csv.gz&quot;</span><span class="p">));</span>
 </pre></div>
-
-</div>
-</div>
-
-<div class="vbox output_wrapper">
-<div class="output vbox">
-
-
-<div class="hbox output_area"><div class="prompt output_prompt">
-    Out[1]:</div>
-<div class="box-flex1 output_subarea output_pyout">
-
-
-<pre>
-580x4 DataFrame:
-           ID TIME CMT     CONC
-[1,]        1  1.0   1  0.34051
-[2,]        1  2.0   1  0.32086
-[3,]        1  5.0   1  0.27354
-[4,]        2  1.5   1  0.56903
-[5,]        2  6.0   1  0.21082
-[6,]        2  9.0   1  0.15317
-[7,]        3  0.5   1   0.7574
-[8,]        3  4.0   1  0.24331
-[9,]        3  7.0   1 0.058185
-[10,]       4  1.0   1  0.48332
-[11,]       4  2.0   1  0.33927
-[12,]       4  5.0   1 0.048025
-[13,]       5  1.5   1  0.87606
-[14,]       5  6.0   1  0.28921
-[15,]       5  9.0   1   0.1743
-[16,]       6  0.5   1   1.0068
-[17,]       6  4.0   1  0.45434
-[18,]       6  7.0   1  0.11297
-[19,]       7  1.0   1  0.32864
-[20,]       7  2.0   1  0.35299
-  :
-[561,]    194  1.5   1  0.68308
-[562,]    194  6.0   1  0.44619
-[563,]    194  9.0   1  0.55203
-[564,]    195  0.5   1     2.24
-[565,]    195  4.0   1  0.77199
-[566,]    195  7.0   1  0.27317
-[567,]    196  1.0   1  0.43453
-[568,]    196  2.0   1  0.17825
-[569,]    197  1.5   1  0.49596
-[570,]    197  6.0   1  0.25903
-[571,]    197  9.0   1   0.3598
-[572,]    198  0.5   1   1.0686
-[573,]    198  4.0   1  0.87058
-[574,]    198  7.0   1  0.14702
-[575,]    199  1.0   1  0.38648
-[576,]    199  2.0   1  0.15785
-[577,]    199  5.0   1 0.061883
-[578,]    200  1.5   1  0.55079
-[579,]    200  6.0   1 0.060114
-[580,]    200  9.0   1 0.011629
-
-</pre>
-
-</div>
-</div>
 
 </div>
 </div>
@@ -1782,7 +1720,7 @@ In&nbsp;[1]:
 <div class="cell border-box-sizing code_cell vbox">
 <div class="input hbox">
 <div class="prompt input_prompt">
-In&nbsp;[1]:
+In&nbsp;[]:
 </div>
 <div class="input_area box-flex1">
 <div class="highlight"><pre><span class="n">m</span> <span class="o">=</span> <span class="n">BolusSD1</span><span class="p">(:(</span><span class="n">CONC</span> <span class="o">~</span> <span class="n">TIME</span><span class="p">),</span> <span class="n">sd1</span><span class="p">);</span>
@@ -1802,48 +1740,13 @@ In&nbsp;[1]:
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>A nonlinear least squares fit is represented by the type <code>NonlinearLS</code>, which is constructed from a nonlinear regression model and, optionally, initial values for the parameters.</p>
 </div>
-<div class="cell border-box-sizing code_cell vbox">
-<div class="input hbox">
-<div class="prompt input_prompt">
-In&nbsp;[2]:
-</div>
-<div class="input_area box-flex1">
-<div class="highlight"><pre><span class="n">methods</span><span class="p">(</span><span class="n">NonlinearLS</span><span class="p">)</span>
-</pre></div>
-
-</div>
-</div>
-
-<div class="vbox output_wrapper">
-<div class="output vbox">
-
-
-<div class="hbox output_area"><div class="prompt output_prompt">
-    Out[2]:</div>
-<div class="box-flex1 output_subarea output_pyout">
-
-
-<pre>
-# 3 methods for generic function &quot;NonlinearLS&quot;:
-NonlinearLS{T&lt;:FloatingPoint}(m::NLregMod{T&lt;:FloatingPoint},pars::Array{T&lt;:FloatingPoint,1},incr::Array{T&lt;:FloatingPoint,1},ch::Cholesky{T&lt;:FloatingPoint},rss::T&lt;:FloatingPoint,tolsqr::T&lt;:FloatingPoint,minfac::T&lt;:FloatingPoint,mxiter::Int64,fit::Bool)
-NonlinearLS{T&lt;:FloatingPoint}(m::NLregMod{T&lt;:FloatingPoint},init::Array{T&lt;:FloatingPoint,1}) at /home/bates/.julia/NLreg/src/nlreg.jl:21
-NonlinearLS{T&lt;:FloatingPoint}(m::NLregMod{T&lt;:FloatingPoint}) at /home/bates/.julia/NLreg/src/nlreg.jl:25
-</pre>
-
-</div>
-</div>
-
-</div>
-</div>
-
-</div>
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>If initial values for the parameters are not given the model's <code>initpars</code> method is used to generate initial values.</p>
 </div>
 <div class="cell border-box-sizing code_cell vbox">
 <div class="input hbox">
 <div class="prompt input_prompt">
-In&nbsp;[3]:
+In&nbsp;[1]:
 </div>
 <div class="input_area box-flex1">
 <div class="highlight"><pre><span class="n">show</span><span class="p">(</span><span class="n">initpars</span><span class="p">(</span><span class="n">m</span><span class="p">))</span>
@@ -1874,7 +1777,7 @@ In&nbsp;[3]:
 <div class="cell border-box-sizing code_cell vbox">
 <div class="input hbox">
 <div class="prompt input_prompt">
-In&nbsp;[4]:
+In&nbsp;[2]:
 </div>
 <div class="input_area box-flex1">
 <div class="highlight"><pre><span class="n">nl</span> <span class="o">=</span> <span class="n">gnfit</span><span class="p">(</span><span class="n">NonlinearLS</span><span class="p">(</span><span class="n">m</span><span class="p">),</span><span class="n">true</span><span class="p">)</span>
@@ -1907,7 +1810,7 @@ Iteration:  5, rss = 110.597, cvg = 4.41408e-11 at [1.14295,0.245682]
 </div>
 
 <div class="hbox output_area"><div class="prompt output_prompt">
-    Out[4]:</div>
+    Out[2]:</div>
 <div class="box-flex1 output_subarea output_pyout">
 
 
@@ -1935,7 +1838,7 @@ Residual standard error = 0.43743 on 578 degrees of freedom
 <div class="cell border-box-sizing code_cell vbox">
 <div class="input hbox">
 <div class="prompt input_prompt">
-In&nbsp;[5]:
+In&nbsp;[3]:
 </div>
 <div class="input_area box-flex1">
 <div class="highlight"><pre><span class="n">coeftable</span><span class="p">(</span><span class="n">nl</span><span class="p">)</span>
@@ -1949,7 +1852,7 @@ In&nbsp;[5]:
 
 
 <div class="hbox output_area"><div class="prompt output_prompt">
-    Out[5]:</div>
+    Out[3]:</div>
 <div class="box-flex1 output_subarea output_pyout">
 
 
@@ -1970,7 +1873,7 @@ K    0.245682  0.020241 12.1378  &lt; eps()
 <div class="cell border-box-sizing code_cell vbox">
 <div class="input hbox">
 <div class="prompt input_prompt">
-In&nbsp;[6]:
+In&nbsp;[4]:
 </div>
 <div class="input_area box-flex1">
 <div class="highlight"><pre><span class="n">deviance</span><span class="p">(</span><span class="n">nl</span><span class="p">)</span>  <span class="c"># residual sum-of-squares</span>
@@ -1984,7 +1887,7 @@ In&nbsp;[6]:
 
 
 <div class="hbox output_area"><div class="prompt output_prompt">
-    Out[6]:</div>
+    Out[4]:</div>
 <div class="box-flex1 output_subarea output_pyout">
 
 
@@ -2009,10 +1912,57 @@ In&nbsp;[6]:
 <div class="cell border-box-sizing code_cell vbox">
 <div class="input hbox">
 <div class="prompt input_prompt">
+In&nbsp;[6]:
+</div>
+<div class="input_area box-flex1">
+<div class="highlight"><pre><span class="n">nm</span> <span class="o">=</span> <span class="n">NLreg</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">SimpleNLMM</span><span class="p">(</span><span class="n">nl</span><span class="p">,</span><span class="n">vector</span><span class="p">(</span><span class="n">sd1</span><span class="p">[:</span><span class="n">ID</span><span class="p">]),</span><span class="n">Diagonal</span><span class="p">))</span>
+</pre></div>
+
+</div>
+</div>
+
+<div class="vbox output_wrapper">
+<div class="output vbox">
+
+
+<div class="hbox output_area"><div class="prompt output_prompt">
+    Out[6]:</div>
+<div class="box-flex1 output_subarea output_pyout">
+
+
+<pre>
+Simple, nonlinear mixed-effects model fit by Laplace approximation
+ logLik: -102.527190, deviance: 205.054379
+
+ Variance components:
+                Variance    Std.Dev.
+ V              0.494279    0.703050
+ K              0.013330    0.115457
+ Residual       0.023797    0.154264
+ Number of obs: 580; levels of grouping factor: 200
+
+Fixed effects parameters:
+     Estimate
+V     1.19333
+K    0.294698
+
+
+</pre>
+
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell vbox">
+<div class="input hbox">
+<div class="prompt input_prompt">
 In&nbsp;[7]:
 </div>
 <div class="input_area box-flex1">
-<div class="highlight"><pre><span class="n">nm</span> <span class="o">=</span> <span class="n">SimpleNLMM</span><span class="p">(</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">nl</span><span class="o">.</span><span class="n">m</span><span class="p">),</span> <span class="n">vector</span><span class="p">(</span><span class="n">sd1</span><span class="p">[:</span><span class="n">ID</span><span class="p">]),</span> <span class="n">Diagonal</span><span class="p">(</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">)),</span> <span class="n">coef</span><span class="p">(</span><span class="n">nl</span><span class="p">))</span>
+<div class="highlight"><pre><span class="n">nm1</span> <span class="o">=</span> <span class="n">NLreg</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">SimpleNLMM</span><span class="p">(</span><span class="n">nl</span><span class="p">,</span><span class="n">vector</span><span class="p">(</span><span class="n">sd1</span><span class="p">[:</span><span class="n">ID</span><span class="p">]),</span><span class="n">Triangular</span><span class="p">))</span>
 </pre></div>
 
 </div>
@@ -2029,19 +1979,19 @@ In&nbsp;[7]:
 
 <pre>
 Simple, nonlinear mixed-effects model fit by Laplace approximation
- logLik: -102.527190, deviance: 205.054379
+ logLik: -102.167404, deviance: 204.334808
 
  Variance components:
                 Variance    Std.Dev.
- V              0.494279    0.703050
- K              0.013330    0.115457
- Residual       0.023797    0.154264
- Number of obs: 580; levels of grouping factors: 200
+ V              0.484640    0.696161
+ K              0.013369    0.115622
+ Residual       0.023999    0.154916
+ Number of obs: 580; levels of grouping factor: 200
 
 Fixed effects parameters:
      Estimate
-V     1.19333
-K    0.294698
+V     1.19672
+K    0.299901
 
 
 </pre>
@@ -2052,6 +2002,9 @@ K    0.294698
 </div>
 </div>
 
+</div>
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Although not currently shown in the output, the within-subject correlation of the random effects for this model fit is <code>-0.091</code>. A likelihood ratio test comparting <code>nm</code> versus <code>nm1</code> has a p-value of 39.6% from which we would conclude that the more complex model, <code>nm1</code>, does not provide a sufficiently better fit to justify the additional parameter.</p>
 </div>
 </body>
 </html>

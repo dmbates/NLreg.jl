@@ -29,7 +29,12 @@ function SimpleNLMM{T<:FP}(m::NLregMod{T},inds::Vector,
     SimpleNLMM(m,inds,nrep,lambda,L,beta,u,copy(u),similar(u),similar(u),
                1,30,convert(T,0.5^9),convert(T,1e-8))
 end
-function SimpleNLMM(nl::NonlinearLS,inds::Vector,lambda::AbstractMatrix)
+function SimpleNLMM(nl::NonlinearLS,inds::Vector,ltype::DataType)
+    lambda = ltype(eye(length(coef(nl))))
+    if ltype == Triangular
+        lambda.uplo = 'L'
+        lambda.unitdiag = 'N'
+    end
     SimpleNLMM(deepcopy(nl.m),inds,lambda,coef(nl))
 end
 
@@ -38,6 +43,7 @@ At_mul_B!(A::Diagonal,B::Matrix)= scale!(A.diag,B)
 Ac_mul_B!(A::Diagonal,B::Matrix)= scale!(A.diag,B)
 A_mul_B!(A::Triangular,B::Matrix) = trmm!('L',A.uplo,'N',A.unitdiag,one(eltype(A)),A.UL,B)
 Ac_mul_B!(A::Triangular,B::Matrix) = trmm!('L',A.uplo,'T',A.unitdiag,one(eltype(A)),A.UL,B)
+diag(A::Triangular) = diag(A.UL)
 
 coef(nm::NLMM) = copy(nm.beta)
 
@@ -193,7 +199,7 @@ function scale(nm::NLMM, sqr=false)
 end
 
 function show(io::IO, m::SimpleNLMM)
-    fit(m); mm = m.m; p,n = size(mm)
+    mm = m.m; p,n = size(mm)
     mstr = m.nAGQ == 1 ? "Laplace approximation" : "adaptive Gauss-Hermite quadrature ($(m.nAGQ))"
     println(io, "Simple, nonlinear mixed-effects model fit by ", mstr)
     oo = deviance(m)
@@ -210,7 +216,7 @@ function show(io::IO, m::SimpleNLMM)
             @printf(io, "             %10f  %10f\n", abs2(si[j]), si[j])
         end
     end
-    @printf(io," Number of obs: %d; levels of grouping factors: %d", n, size(m.u,2))
+    @printf(io," Number of obs: %d; levels of grouping factor: %d", n, size(m.u,2))
     println(io); println(io)
 
     println(io, "Fixed effects parameters:")
