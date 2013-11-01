@@ -99,7 +99,7 @@ module NLreg
         end
     end
 
-    include("nlreg.jl")
+    include("nonlinreg.jl")
     include("plreg.jl")
     include("models.jl")
     include("nlmm.jl")
