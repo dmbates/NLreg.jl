@@ -1,12 +1,13 @@
 module NLreg
 
     using DataFrames, NumericExtensions, NLopt, Base.Grisu
-    using Base.LinAlg.BLAS: gemv, gemv!, trmm!, trsm!, trsv!, syrk!
+    using Base.LinAlg.BLAS: gemv, gemv!, gemm!, trmm!, trsm!, trsv!, syrk!
     using Base.LinAlg.LAPACK: gemqrt!,geqrt3!, potri!, potrf!, potrs!
     using Base.LinAlg.CHOLMOD: CholmodSparse!, CholmodSparse, CholmodFactor
     using Stats: StatisticalModel, RegressionModel
     using Distributions: FDist, ccdf
     using Base.Grisu: _show, PRECISION, FIXED, SHORTEST
+    using NumericExtensions: sumsq, Subtract
 
     importall Base
     import Distributions: fit
@@ -21,12 +22,13 @@ module NLreg
         MicMen,        # Michaelis-Menten model
         NLregMod,      # Nonlinear regression model abstract type
         NonlinearLS,   # Nonlinear least squares fit
-        PLregFit,      # Partially linear regression model fit
+        PLinearLS,     # Partially linear regression model fit
         PLregMod,      # Partially linear regression model
         NLMM,          # Nonlinear mixed-effects model
         SimpleNLMM,    # Simple population nonlinear mixed-effects model
 
         deviance,      # Laplace approximation to the deviance of an NLMM
+        fit,           # generic fit function imported from Distributions
         gnfit,         # nonlinear least squares by Gauss-Newton
         gpinc,         # Golub-Pereyra increment
         incr!,         # increment the spherical random effects

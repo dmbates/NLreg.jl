@@ -1,60 +1,53 @@
 abstract PLregMod{T<:FP} <: NLregMod{T}
 
-function updtmu!{T<:FP}(m::PLregMod{T}, par::Vector{T},mu::Vector{T},Jac::Matrix{T})
-    n, nl, nnl = size(m); lin = 1:nl; MM = sub(Jac,:,lin); MMD = Array(T,n,nl,nnl);
-    linpar = sub(par, lin); nlpar = sub(par, nl + (1:nnl))
-    updtMM!(m, nlpar, MM, MMD)
-    gemv!('N',1.0,MM,linpar,0.0,mu)
-    for j in 1:nnl
-        gemv!('N',1.0,sub(MMD,:,:,j),linpar,0.,sub(Jac,:,j))
+function updtMM!(m::PLregMod,nlpars::StridedVector)
+    x = m.x; MMD=m.MMD; nnl,nl,n = size(MMD); tg = sub(m.tgrad,1:nl,:)
+    for i in 1:length(m.y)
+        m.mmf(nlpars,sub(x,:,i),sub(tg,:,i),sub(MMD,:,:,i))
     end
-    mu
+    tg
 end
-    
-type PLregFit{T<:FP}
+
+function updtmu!(m::PLregMod,pars::Vector)
+    x = m.x; tg = m.tgrad; MMD = m.MMD
+    nl,nnl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
+    nlpars = sub(pars,nlind); lpars = sub(pars,lind)
+    for i in 1:n
+        m.mmf(nlpars,sub(x,:,i),sub(tg,lind,i),sub(MMD,:,:,i))
+        gemv!('T',1.,sub(MMD,:,:,i),lpars,0.,sub(tg,nlind,i))
+    end
+    sumsq(map!(Subtract(),m.resid,m.y,gemv!('T',1.,sub(tg,lind,:),lpars,0.,m.mu)))
+end
+
+size(pl::PLregMod) = size(pl.MMD)
+size(pl::PLregMod,args...) = size(pl.MMD,args...)
+
+type PLinearLS{T<:FP}
     m::PLregMod{T}
-    y::Vector{T}
-    resid::Vector{T}
-    c::Vector{T}
+    qr::QR{T}
     pars::Vector{T}
     incr::Vector{T}
-    vs::Matrix{T}
-    tr::Matrix{T}
     B::Matrix{T}
-    MM::Matrix{T}
-    MMD::Matrix{T}
 end
-function PLinearLS{T<:FP}(m::PLregMod{T})
-    p,n,nnl = size(m)
-    PLinearLS(m, y, similar(y), similar(y), Array(T,nl + nnl),
-             Array(T,nnl), Array(T,n,nl), Array(T,nl,nl), Array(T,n,nnl),
-             Array(T,n,nl), Array(T,n,nl,nnl))
+function PLinearLS{T<:FP}(m::PLregMod{T},nlpars::Vector{T})
+    nl,nnl,n = size(m); length(nlpars) == nnl || error("Dimension mismatch")
+    qr = QR(updtMM!(m,nlpars)')
+    PLinearLS(m, qr, [qr\m.y,nlpars], zeros(T,nnl), Array(T,nl,nnl))
 end
 PLinearLS{T<:FP}(m::PLregMod{T},y::DataArray{T,1}) = PLinearLS(m,vector(c))
 PLinearLS{T<:Integer}(m::PLregMod{T},y::DataArray{T,1}) = PLinearLS(m,convert(Vector{T},vector(c)))
 
-function updtmu!{T<:FP}(m::PLregMod{T},psi::T)
-    MM = updtMM!(m,psi); MMD = m.MMD; MtM = m.MtM; y = m.y
-    _,info = potrf!('U',syrk!('U','N',one(T),MM,zero(T),MtM))
-    info == 0 || error("Singular model matrix for conditionally linear parameters")
-    Vm = potrs!('U',MtM,gemv('N',one(T),MM,y))
-    sumsqdiff!(m.resid,y,gemv!('T',one(T),MM,Vm,zero(T),m.mu))
+function deviance{T<:FP}(pl::PLinearLS{T},nlp::Vector{T})
+    m = pl.m; nl,nnl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
+    y = m.y; r = m.resid; pars = pl.pars
+    copy!(sub(pars,nlind), nlp)         # record nl pars
+    updtMM!(m,nlp)       # update the model matrix for the linear pars
+    pl.qr = qr = QR(sub(m.tgrad,lind,:)')
+    copy!(sub(pars,lind),qr\y)
+    updtmu!(m,pars)
 end
 
-function deviance{T<:FP}(pl::PLregFit{T},nlp::Vector{T})
-    m = pl.m; (n,nl,nnl) = size(m);
-    lin = 1:nl; nonlin = nl + (1:nnl)
-    vs = pl.vs; y = pl.y; resid = pl.resid; c = copy!(pl.c,y); pars = pl.pars
-    copy!(sub(pars, nonlin), nlp)                   # record nl pars
-    pl.tr = tr = qrfact!(copy!(vs,updtMM(m,nlp,MM,MMD))).T # update and factor mm
-    copy!(resid,gemqrt!('L','T',vs,tr,c))           # c = Q'y
-    trsv!('U','N','N',sub(vs,lin,lin),copy!(sub(pars,lin),sub(c,lin))) # lin. pars
-    fill!(sub(resid, lin), zero(T))
-    gemqrt!('L','N',vs,tr,resid)        # residuals
-    sumsq(resid)
-end
-
-function gpinc{T<:FP}(pl::PLregFit{T})
+function gpinc{T<:FP}(pl::PLinearLS{T})
     m = pl.m; (n,nl,nnl) = size(m); Aphi = mmd(m); B = pl.B; r = pl.resid
     lin = 1:nl; lpars = sub(pl.pars,lin)
     for k in 1:nnl gemv!('N',1.,sub(Aphi,:,:,k),lpars,0.,sub(B,:,k)) end

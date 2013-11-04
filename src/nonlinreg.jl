@@ -1,10 +1,38 @@
 abstract NLregMod{T<:FP}
 
+## default methods for all NLregMod objects
+model_response(m::NLregMod) = m.y
+
+residuals(m::NLregMod) = m.resid
+
 size(m::NLregMod) = size(m.tgrad)
 size(m::NLregMod,args...) = size(m.tgrad,args...)
-## default methods for all NLregMod objects
-residuals(m::NLregMod) = m.resid
-model_response(m::NLregMod) = m.y
+
+function updtmu!(m::NLregMod, pars::Vector)
+    x = m.x; mu = m.mu; tgrad = m.tgrad;
+    y = m.y; r = m.resid; rss = zero(eltype(mu))
+    for i in 1:length(y)
+        mu[i] = m.f(pars,sub(x,:,i),sub(tgrad,:,i)) # pass subarrays by reference
+        r[i] = y[i] - mu[i]
+        rss += abs2(r[i])
+    end
+    rss
+end
+function updtmu!(m::NLregMod, pars::Matrix, inds::Vector)
+    x = m.x; mu = m.mu; tgrad = m.tgrad; k,n = size(tgrad); rss = zero(eltype(mu))
+    length(inds) == n && size(pars,1) == k || error("Dimension mismatch")
+    y = m.y; r = m.resid; ii = 0
+    for i in 1:n
+        if ii != inds[i]
+            ii = inds[i]
+        end
+        mu[i] = m.f(sub(pars,:,ii),sub(x,:,i),sub(tgrad,:,i))
+        r[i] = y[i] - mu[i]
+        rss += abs2(r[i])
+    end
+    rss
+end
+updtmu!(m::NLregMod, p::Matrix) = updtmu!(m,p,1:length(m.y))
 
 type NonlinearLS{T<:FP} <: RegressionModel # nonlinear least squares fits
     m::NLregMod{T}
@@ -18,7 +46,12 @@ type NonlinearLS{T<:FP} <: RegressionModel # nonlinear least squares fits
     fit::Bool
 end
 function NonlinearLS{T<:FP}(m::NLregMod{T},init::Vector{T})
-    p,n = size(m); length(init) == p || error("Dimension mismatch")
+    p,n = size(m)
+    if isa(m,PLregMod)
+        nl,nnl,n = size(m)
+        p = nl + nnl
+    end
+    length(init) == p || error("Dimension mismatch")
     rss = updtmu!(m, init); tg = m.tgrad
     NonlinearLS(m, init, zeros(T,p), cholfact(eye(p)), rss, 1e-8, 0.5^10, 1000, false)
 end
@@ -83,7 +116,7 @@ function gnfit(nl::NonlinearLS,verbose::Bool=false) # Gauss-Newton nonlinear lea
 end
 
 nobs(nl::NonlinearLS) = size(nl,2)
-    
+
 pnames(nl::NonlinearLS) = pnames(nl.m)
 
 function show{T<:FP}(io::IO, nl::NonlinearLS{T})
@@ -98,8 +131,9 @@ function show{T<:FP}(io::IO, nl::NonlinearLS{T})
     print(io, " on $(n-p) degrees of freedom")
 end
     
-size(nl::NonlinearLS) = size(nl.m)
-size(nl::NonlinearLS,args...) = size(nl.m,args...)
+size(nl::NonlinearLS) = size(nl.m.tgrad)
+
+size(nl::NonlinearLS,args...) = size(nl.m.tgrad,args...)
 
 stderr(nl::NonlinearLS) = sqrt(diag(vcov(nl)))
     

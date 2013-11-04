@@ -1,62 +1,50 @@
-function updtmu!{T<:FP}(m::NLregMod{T}, pars::Vector{T})
-    x = m.x; mu = m.mu; tgrad = m.tgrad;
-    y = m.y; r = m.resid; rss = zero(T)
-    for i in 1:length(y)
-        mu[i] = m.f(pars,sub(x,:,i),sub(tgrad,:,i)) # pass subarrays by reference
-        r[i] = y[i] - mu[i]
-        rss += abs2(r[i])
-    end
-    rss
-end
-function updtmu!{T<:FP}(m::NLregMod{T}, pars::Matrix{T}, inds::Vector)
-    x = m.x; mu = m.mu; tgrad = m.tgrad; k,n = size(tgrad); rss = zero(T)
-    length(inds) == n && size(pars,1) == k || error("Dimension mismatch")
-    y = m.y; r = m.resid; ii = 0
-    for i in 1:n
-        if ii != inds[i]
-            ii = inds[i]
-        end
-        mu[i] = m.f(sub(pars,:,ii),sub(x,:,i),sub(tgrad,:,i))
-        r[i] = y[i] - mu[i]
-        rss += abs2(r[i])
-    end
-    rss
-end
-updtmu!{T<:FP}(m::NLregMod{T}, p::Matrix{T}) = updtmu!(m,p,1:length(m.y))
-
 immutable MicMen{T<:FP} <: PLregMod{T}
-    x::Vector{T}
+    x::Matrix{T}
     y::Vector{T}
     mu::Vector{T}
     resid::Vector{T}
     tgrad::Matrix{T}
-    MM::Matrix{T}
     MMD::Array{T,3}
-    MtM::Matrix{T}
+    mmf::Function
+end
+function MicMenmmf(nlpars::StridedVector,x::StridedVector,
+                   tg::StridedVector,MMD::StridedMatrix)
+    x1 = x[1]
+    denom = nlpars[1] + x1
+    MMD[1,1] = -(tg[1] =  x1/denom)/denom
 end
 function MicMen{T<:FP}(x::Vector{T},y::Vector{T})
     n = length(x); length(y) == n || error("Dimension mismatch")
-    MicMen(x,y,similar(x),similar(x),Array(T,(2,n)),ones(T,(1,n)),zeros(T,(1,1,n)),zeros(T,(1,1)))
+    MicMen(reshape(x,(1,n)),y,similar(x),similar(x),Array(T,(2,n)),
+           zeros(T,(1,1,n)),MicMenmmf)
 end
-MicMen{T<:FP}(x::DataArray{T,1},y::DataArray{T,1}) = MicMen(vector(x),vector(y))
-function MicMenf!{T<:FP}(K::T,xi::T,MM::UnsafeVectorView{T},MMD::UnsafeMatrixView{T})
-    denom = K + xi
-    MMD[1,1] = -(MM[1] =  xi/denom)/denom
+MicMen(x::DataVector,y::DataVector) = MicMen(float(x),float(y))
+function MicMen(f::Formula,dat::AbstractDataFrame)
+    mf = ModelFrame(f,dat)
+    mat = ModelMatrix(mf).m
+    rr = model_response(mf)
+    T = promote_type(eltype(mat),eltype(rr))
+    MicMen(convert(Vector{T},mat[:,end]),convert(Vector{T},rr))
 end
+MicMen(ex::Expr,dat::AbstractDataFrame) = MicMen(Formula(ex),dat)
 
+function initpars(m::MicMen)
+    y = m.y; T = eltype(y)
+    (n = length(y)) < 2 && return [m.y[1],one(T)]
+    cc = hcat(ones(T,n),1. ./ vec(m.x[1,:]))\ (1. ./ m.y)
+    [1.,cc[2]] ./ cc[1]
+end
+    
 pnames(m::MicMen) = ["Vm", "K"]
-size(m::MicMen) = (2,length(m.x),1)
-
-function updtMM!{T<:FP}(m::MicMen{T},K::T)
-    x = m.x; MM = m.MM; MMD = m.MMD; MtM = m.MtM
-    for i in 1:length(x)
-        MicMenf!(K,x[i],unsafe_view(MM,:,i),unsafe_view(MMD,:,:,i))
-    end
-    MM
-end
 
 immutable AsympReg{T<:FP} <: PLregMod{T}
-    x::Vector{T}
+    x::Matrix{T}
+    y::Vector{T}
+    mu::Vector{T}
+    resid::Vector{T}
+    tgrad::Matrix{T}
+    MMD::Array{T,3}
+    mmf::Function
 end
 AsympReg{T<:FP}(c::DataArray{T,1}) = AsympReg(vector(c))
 AsympReg{T<:Integer}(c::DataArray{T,1}) = AsympReg(float(vector(c)))
@@ -116,14 +104,16 @@ function Logsd1(f::Formula,dat::AbstractDataFrame)
 end
 Logsd1(ex::Expr,dat::AbstractDataFrame) = Logsd1(Formula(ex),dat)
 
-function Logsd1f{T<:FP}(V::T,K::T,ti::T,mu::UnsafeVectorView{T},tg::UnsafeVectorView{T})
-    tg[2] = -ti*K*(tg[1] = mu[1] = mm = V*exp(-K*ti))
+function Logsd1f(p::StridedVector,x::StridedVector,tg::StridedVector)
+    x1 = x[1]; V = exp(p[1]); K = exp(p[2])
+    tg[2] = -x1*K*(mm = V*exp(-K*x1))
+    tg[1] = V*mm
     mm
 end
 
 function initpars{T<:FP}(m::Logsd1{T})
-    (n = length(m.t)) < 2 && return [zero(T),-one(T)]
-    cc = hcat(ones(n),m.t)\log(m.y)
+    (n = length(m.y)) < 2 && return [zero(T),-one(T)]
+    cc = hcat(ones(n),vec(m.x[1,:]))\log(m.y)
     cc[2] < 0. ? [cc[1],log(-cc[2])] : [cc[1],-one(T)]
 end
 
@@ -164,3 +154,6 @@ function initpars{T<:FP}(m::BolusSD1{T})
     cc = hcat(ones(T,n),vec(m.x[1,:]))\log(m.y)
     [exp(cc[1]),-cc[2]]
 end
+
+
+
