@@ -1,6 +1,6 @@
 module NLreg
 
-    using DataFrames, NumericExtensions, NLopt, Base.Grisu
+    using DataArrays, DataFrames, NumericExtensions, NLopt, Base.Grisu
     using Base.LinAlg.BLAS: gemv, gemv!, gemm!, trmm!, trsm!, trsv!, syrk!
     using Base.LinAlg.LAPACK: gemqrt!,geqrt3!, potri!, potrf!, potrs!
     using Base.LinAlg.CHOLMOD: CholmodSparse!, CholmodSparse, CholmodFactor

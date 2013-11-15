@@ -46,20 +46,26 @@ immutable AsympReg{T<:FP} <: PLregMod{T}
     MMD::Array{T,3}
     mmf::Function
 end
-AsympReg{T<:FP}(c::DataArray{T,1}) = AsympReg(vector(c))
-AsympReg{T<:Integer}(c::DataArray{T,1}) = AsympReg(float(vector(c)))
-
-pnames(m::AsympReg) = ["Asym","R0","rc"]
-
-function updtMM!{T<:FP}(m::AsympReg{T},rc::T,MM::Matrix{T},MMD::Array{T,3})
-    x = m.x
-    for i in 1:length(x)
-        xi = x[i]
-        MMD[i,2,1] = -xi*(MM[i,2] = exp(-rc*xi))
-    end
-    MM
+function AsympRegmmf(nlpars::StridedVector,x::StridedVector,
+                    tg::StridedVector,MMD::StridedMatrix)
+    x1 = x[1];
+    MMD[2,1] = -x1 *(tg[2] = exp(-nlpars[1]*x1))
 end
-updtMM!{T<:FP}(m::AsympReg{T},nlp::Vector{T},MM::Matrix{T},MMD::Array{T,3}) = updtMM!(m,nlp[1],MM,MMD)
+function AsympReg{T<:FP}(x::Vector{T},y::Vector{T})
+    n = length(x); length(y) == n || error("Dimension mismatch")
+    AsympReg(reshape(x,(1,n)),y,similar(x),similar(x),Array(T,(3,n)),
+           zeros(T,(2,1,n)),AsympRegmmf)
+end
+AsympReg(x::DataVector,y::DataVector) = AsympReg(float(x),float(y))
+function AsympReg(f::Formula,dat::AbstractDataFrame)
+    mf = ModelFrame(f,dat)
+    mat = ModelMatrix(mf).m
+    rr = model_response(mf)
+    T = promote_type(eltype(mat),eltype(rr))
+    AsympReg(convert(Vector{T},mat[:,end]),convert(Vector{T},rr))
+end
+AsympReg(ex::Expr,dat::AbstractDataFrame) = AsympReg(Formula(ex),dat)
+pnames(m::AsympReg) = ["Asym","R0","rc"]
 
 immutable Exp1{T<:FP} <: PLregMod{T}
     t::Vector{T}
