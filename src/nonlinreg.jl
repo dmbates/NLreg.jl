@@ -48,7 +48,7 @@ end
 function NonlinearLS{T<:FP}(m::NLregMod{T},init::Vector{T})
     p,n = size(m)
     if isa(m,PLregMod)
-        nl,nnl,n = size(m)
+        nnl,nl,n = size(m)
         p = nl + nnl
     end
     length(init) == p || error("Dimension mismatch")
@@ -78,17 +78,17 @@ function gnfit(nl::NonlinearLS,verbose::Bool=false) # Gauss-Newton nonlinear lea
         r = m.resid; tg = m.tgrad; ch = nl.ch; nl.rss = rss = updtmu!(m,pars); UL = ch.UL
         for i in 1:nl.mxiter
             ## Create the Cholesky factor of tg * tg' in place
-            _,info = potrf!('U',syrk!('U','N',1.,tg,0.,UL))
+            _,info = potrf!('U',BLAS.syrk!('U','N',1.,tg,0.,UL))
             info == 0 || error("Singular gradient matrix at pars = $(pars')")
             ## solve in place for the Gauss-Newton increment - done in two stages
             ## to be able to evaluate the orthogonality convergence criterion
-            cvg = sumsq(trsv!('U','T','N',UL,gemv!('N',1.,tg,r,0.,incr)))/rss
+            cvg = sumsq(BLAS.trsv!('U','T','N',UL,BLAS.gemv!('N',1.,tg,r,0.,incr)))/rss
             if verbose
                 print("Iteration:",lpad(string(i),3),", rss = "); showcompact(rss)
                 print(", cvg = "); showcompact(cvg); print(" at "); showcompact(pars)
                 println()
             end
-            trsv!('U','N','N',UL,incr)
+            BLAS.trsv!('U','N','N',UL,incr)
             if verbose
                 print("   Incr: ")
                 showcompact(incr)
@@ -139,5 +139,5 @@ stderr(nl::NonlinearLS) = sqrt(diag(vcov(nl)))
     
 function vcov{T<:FP}(nl::NonlinearLS{T})
     p,n = size(nl)
-    deviance(nl)/convert(T,n-p) * symmetrize!(potri!('U', copy(nl.ch.UL))[1], 'U')
+    deviance(nl)/convert(T,n-p) * symmetrize!(LAPACK.potri!('U', copy(nl.ch.UL)), 'U')
 end
