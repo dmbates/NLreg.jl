@@ -41,9 +41,8 @@ end
 A_mul_B!(A::Diagonal,B::Matrix) = scale!(A.diag,B)
 At_mul_B!(A::Diagonal,B::Matrix)= scale!(A.diag,B)
 Ac_mul_B!(A::Diagonal,B::Matrix)= scale!(A.diag,B)
-A_mul_B!(A::Triangular,B::Matrix) = trmm!('L',A.uplo,'N',A.unitdiag,one(eltype(A)),A.UL,B)
-Ac_mul_B!(A::Triangular,B::Matrix) = trmm!('L',A.uplo,'T',A.unitdiag,one(eltype(A)),A.UL,B)
-diag(A::Triangular) = diag(A.UL)
+A_mul_B!(A::Triangular,B::Matrix) = BLAS.trmm!('L',A.uplo,'N',A.unitdiag,one(eltype(A)),A.UL,B)
+Ac_mul_B!(A::Triangular,B::Matrix) = BLAS.trmm!('L',A.uplo,'T',A.unitdiag,one(eltype(A)),A.UL,B)
 
 coef(nm::NLMM) = copy(nm.beta)
 
@@ -80,10 +79,10 @@ function updtL!{T<:FP}(nm::SimpleNLMM{T})
     for i in 1:length(L)
         ni = nn[i]; ii = offset+(1:nn[i]); offset += ni;
         g = sub(mm,:,ii); du = sub(delu,:,i)
-        gemv!('N',1.,g,sub(rr,ii),-1.,du)
+        BLAS.gemv!('N',1.,g,sub(rr,ii),-1.,du)
         ## Don't need to check for singularity in potrf! result b/c adding I
-        ## TODO: use two anmlications of trsv and evaluate the numerator of the conv. crit.
-        potrs!('L',potrf!('L',syrk!('L','N',1.,g,1.,copy!(L[i],ee)))[1],du)
+        ## TODO: use two applications of trsv and evaluate the numerator of the conv. crit.
+        LAPACK.potrs!('L',LAPACK.potrf!('L',BLAS.syrk!('L','N',1.,g,1.,copy!(L[i],ee)))[1],du)
     end
     prss!(nm,one(T))                    # evaluate prss with full increment
 end
