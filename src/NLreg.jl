@@ -1,8 +1,6 @@
 module NLreg
 
     using DataArrays, DataFrames, NumericExtensions, NLopt, Base.Grisu
-    using Base.LinAlg.BLAS: gemv, gemv!, gemm!, trmm!, trsm!, trsv!, syrk!
-    using Base.LinAlg.LAPACK: gemqrt!,geqrt3!, potri!, potrf!, potrs!
     using Base.LinAlg.CHOLMOD: CholmodSparse!, CholmodSparse, CholmodFactor
     using Stats: StatisticalModel, RegressionModel
     using Distributions: FDist, ccdf
@@ -11,7 +9,7 @@ module NLreg
 
     importall Base
     import Distributions: fit
-    import NumericExtensions: evaluate, result_type
+    import NumericExtensions: unsafe_view
     import Stats: coef, coeftable, confint, deviance, loglikelihood, nobs, stderr, vcov,
                   model_response, predict, residuals, rle
 
