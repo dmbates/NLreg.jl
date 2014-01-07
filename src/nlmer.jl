@@ -1,5 +1,3 @@
-using Base.LinAlg.BLAS: trsv!, gemv!
-using Base.LinAlg.LAPACK: gemqrt!,geqrt3!, potri!
 using DataFrames, RDatasets, NumericExtensions, GLM
 import Distributions.fit, Base.show, GLM.deviance, GLM.nobs
 import NumericExtensions: evaluate, result_type
@@ -36,9 +34,9 @@ function mmder!{T<:FloatingPoint}(mmd::Array{T,3},mm::Matrix{T},m::MicMen{T},nlp
 end    
 function expctd!{T<:FloatingPoint}(mu::Vector{T},m::NLregMod{T},pars::Vector{T})
     nl = nlinear(m)
-    Base.LinAlg.BLAS.gemv!('N', one(T),
-                           modelmat(m,sub(pars,(nl+1):length(pars))),
-                           sub(pars,1:nl), 0., mu)
+    BLAS.gemv!('N', one(T),
+               modelmat(m,sub(pars,(nl+1):length(pars))),
+               sub(pars,1:nl), 0., mu)
 end
 expctd{T<:FloatingPoint}(m::NLregMod{T},pars::Vector{T}) = expctd!(Array(T,(nobs(m),)),m,pars)
 npars{T<:FloatingPoint}(m::NLregMod{T}) = length(pnames(m))
@@ -64,10 +62,10 @@ function deviance{T<:FloatingPoint}(pl::plinear{T},nlpars::Vector{T})
     lin = 1:nl; nonlin = nl + (1:(length(pnames(m)) - nl))
     copy!(sub(pl.pars, nlin), nlpars)   # record the current values
     _,pl.tr = qrfact!(modelmat!(pl.vs,m,nlpars)) # decompose model matrix for linear pars
-    gemqrt!('L','T',pl.vs,pl.tr,copy!(pl.mu,pl.y)) # create Q'y in pl.mu
-    trsv!('U','N','N',sub(pl.vs,lin,lin),copy!(sub(pl.pars,lin),sub(pl.mu,lin))) # solve
+    LAPACK.gemqrt!('L','T',pl.vs,pl.tr,copy!(pl.mu,pl.y)) # create Q'y in pl.mu
+    BLAS.trsv!('U','N','N',sub(pl.vs,lin,lin),copy!(sub(pl.pars,lin),sub(pl.mu,lin))) # solve
     fill!(sub(pl.mu, (nl+1):nobs(m)), zero(T))
-    gemqrt!('L','N',pl.vs,pl.tr,pl.mu)
+    LAPACK.gemqrt!('L','N',pl.vs,pl.tr,pl.mu)
     sqdiffsum(pl.y,pl.mu)
 end
           
@@ -234,12 +232,12 @@ end
 function qtr(nl::NonlinearLS)
     vs = nl.qr.vs; inc = nl.incr; qt = nl.qtr
     copy!(vs, nl.jacob); copy!(qt, nl.resid)
-    _, T = geqrt3!(vs)
+    _, T = LAPACK.geqrt3!(vs)
     copy!(nl.qr.T,T)
-    gemqrt!('L','T',vs,T,qt)
+    LAPACK.gemqrt!('L','T',vs,T,qt)
     s = 0.; p = size(vs,2)
     for i in 1:p qti = qt[i]; s += qti * qti; inc[i] = qti  end
-    trsv!('U','N','N',sub(vs,1:p,1:p),inc)
+    BLAS.trsv!('U','N','N',sub(vs,1:p,1:p),inc)
     s
 end
 
