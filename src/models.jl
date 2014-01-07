@@ -53,8 +53,8 @@ function AsympRegmmf(nlpars::StridedVector,x::StridedVector,
 end
 function AsympReg{T<:FP}(x::Vector{T},y::Vector{T})
     n = length(x); length(y) == n || error("Dimension mismatch")
-    AsympReg(reshape(x,(1,n)),y,similar(x),similar(x),Array(T,(3,n)),
-           zeros(T,(2,1,n)),AsympRegmmf)
+    AsympReg(reshape(x,(1,n)),y,similar(x),similar(x),ones(T,(3,n)),
+           zeros(T,(1,2,n)),AsympRegmmf)
 end
 AsympReg(x::DataVector,y::DataVector) = AsympReg(float(x),float(y))
 function AsympReg(f::Formula,dat::AbstractDataFrame)
@@ -66,6 +66,14 @@ function AsympReg(f::Formula,dat::AbstractDataFrame)
 end
 AsympReg(ex::Expr,dat::AbstractDataFrame) = AsympReg(Formula(ex),dat)
 pnames(m::AsympReg) = ["Asym","R0","rc"]
+
+function initpars(m::AsympReg)
+    y = m.y; T = eltype(y); n = length(y)
+    miny = minimum(y); maxy = maximum(y)
+    p3 = abs(linreg(m.x[1,:]', log(y .- (miny - convert(T,0.25)*(maxy-miny))))[2])
+    updtMM!(m,[p3])
+    [sub(m.tgrad,1:2,:)'\m.y, p3]
+end
 
 immutable Exp1{T<:FP} <: PLregMod{T}
     t::Vector{T}
