@@ -78,7 +78,7 @@ function gnfit(nl::NonlinearLS,verbose::Bool=false) # Gauss-Newton nonlinear lea
         r = m.resid; tg = m.tgrad; ch = nl.ch; nl.rss = rss = updtmu!(m,pars); UL = ch.UL
         for i in 1:nl.mxiter
             ## Create the Cholesky factor of tg * tg' in place
-            _,info = potrf!('U',BLAS.syrk!('U','N',1.,tg,0.,UL))
+            _,info = LAPACK.potrf!('U',BLAS.syrk!('U','N',1.,tg,0.,UL))
             info == 0 || error("Singular gradient matrix at pars = $(pars')")
             ## solve in place for the Gauss-Newton increment - done in two stages
             ## to be able to evaluate the orthogonality convergence criterion

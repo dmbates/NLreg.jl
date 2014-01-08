@@ -5,42 +5,42 @@ module NLreg
     using Stats: StatisticalModel, RegressionModel
     using Distributions: FDist, ccdf
     using Base.Grisu: _show, PRECISION, FIXED, SHORTEST
-    using NumericExtensions: sumsq, Subtract
+#    using NumericExtensions: sumsq, Subtract
 
     importall Base
     import Distributions: fit
-    import NumericExtensions: unsafe_view
     import Stats: coef, coeftable, confint, deviance, loglikelihood, nobs, stderr, vcov,
                   model_response, predict, residuals, rle
 
     export
-        AsympReg,      # Asymptotic regression model
-        BolusSD1,      # 1-compartment, single bolus dose model
-        Logsd1,        # 1-compartment, single bolus dose model with logged parameters
-        MicMen,        # Michaelis-Menten model
-        NLregMod,      # Nonlinear regression model abstract type
-        NonlinearLS,   # Nonlinear least squares fit
-        PLinearLS,     # Partially linear regression model fit
-        PLregMod,      # Partially linear regression model
-        NLMM,          # Nonlinear mixed-effects model
-        SimpleNLMM,    # Simple population nonlinear mixed-effects model
+        AsympOrig,    # Asymptotic regression through origin  - partially linear
+        AsympReg,     # Asymptotic regression model - partially linear
+        LogBolusSD1,  # 1-compartment, single bolus dose model - partially linear, logK
+        Logis3P,      # 3-parameter logistic - partially linear
+        Logsd1,       # 1-compartment, single bolus dose model with logged parameters
+        MicMen,       # Michaelis-Menten model - partially linear
+        NLregMod,     # Nonlinear regression model abstract type
+        NonlinearLS,  # Nonlinear least squares fit
+        PLinearLS,    # Partially linear regression model fit
+        PLregMod,     # Partially linear regression model
+        NLMM,         # Nonlinear mixed-effects model
+        SimpleNLMM,   # Simple population nonlinear mixed-effects model
 
-        deviance,      # Laplace approximation to the deviance of an NLMM
-        fit,           # generic fit function imported from Distributions
-        gnfit,         # nonlinear least squares by Gauss-Newton
-        gpinc,         # Golub-Pereyra increment
-        incr!,         # increment the spherical random effects
-        initpars,      # create initial values for the parameters
-        lowerbd,       # lower bounds on NLMM parameters
-        pnames,        # names of parameters in a model
-        pnls!,         # penalized nonlinear least squares fit
-        prss!,         # penalized rss for b = lambda * (u + fac*delu)
-        setpars!,      # set new parameter values (beta + theta) in an NLMM
-        theta,         # extract covariance parameters
-        theta!,        # set covariance parameters
-        updtMM!,       # update the model matrix in a PLregMod
-        updtL!,        # update L and solve for delu
-        updtmu!        # update mu and tgrad
+        gnfit,        # nonlinear least squares by Gauss-Newton
+        gpinc,        # Golub-Pereyra increment
+        gpfit,        # partially linear least squares fit by Golub-Pereyra
+        incr!,        # increment the spherical random effects
+        initpars,     # create initial values for the parameters
+        lowerbd,      # lower bounds on NLMM parameters
+        pnames,       # names of parameters in a model
+        pnls!,        # penalized nonlinear least squares fit
+        prss!,        # penalized rss for b = lambda * (u + fac*delu)
+        setpars!,     # set new parameter values (beta + theta) in an NLMM
+        theta,        # extract covariance parameters
+        theta!,       # set covariance parameters
+        updtMM!,      # update the model matrix in a PLregMod
+        updtL!,       # update L and solve for delu
+        updtmu!       # update mu and tgrad
 
     typealias FP FloatingPoint
 

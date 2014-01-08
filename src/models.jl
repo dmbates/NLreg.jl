@@ -65,7 +65,7 @@ function AsympReg(f::Formula,dat::AbstractDataFrame)
     AsympReg(convert(Vector{T},mat[:,end]),convert(Vector{T},rr))
 end
 AsympReg(ex::Expr,dat::AbstractDataFrame) = AsympReg(Formula(ex),dat)
-pnames(m::AsympReg) = ["Asym","R0","rc"]
+pnames(m::AsympReg) = ["Asym","delR0","rc"]
 
 function initpars(m::AsympReg)
     y = m.y; T = eltype(y); n = length(y)
@@ -75,27 +75,40 @@ function initpars(m::AsympReg)
     [sub(m.tgrad,1:2,:)'\m.y, p3]
 end
 
-immutable Exp1{T<:FP} <: PLregMod{T}
-    t::Vector{T}
+immutable AsympOrig{T<:FP} <: PLregMod{T}
+    x::Matrix{T}
+    y::Vector{T}
+    mu::Vector{T}
+    resid::Vector{T}
+    tgrad::Matrix{T}
+    MMD::Array{T,3}
+    mmf::Function
 end
-Exp1{T<:FP}(t::DataArray{T,1}) = Exp1(vector(t))
-Exp1{T<:Integer}(t::DataArray{T,1}) = Exp1(float(vector(t)))
-pnames(m::Exp1) = ["V","ke"]
-size(m::Exp1) = (length(m.x),1,1)
-updt1!{T<:FP}(m::Exp1,t::T,ke::T,mm::StridedVector{T},mmd::StridedMatrix{T}) = mmd[1,1] = -t*(mm[1] = exp(-ke*t))
-
-function updtMM!{T<:Float64}(m::Exp1{T},ke::T,MM::Matrix{T},MMD::Array{T,3})
-    t=m.t; for i in 1:length(t) updt1!(m,t[i],ke,sub(MM,:,i),sub(MMD,:,:,i)) end
-    MM
+function AsympOrigmmf(nlpars::StridedVector,x::StridedVector,
+                      tg::StridedVector,MMD::StridedMatrix)
+    x1 = x[1]; ex = exp(-nlpars[1]*x1)
+    MMD[1,1] = x1*ex
+    tg[1] =  one(typeof(x1)) - ex
 end
-function updtMM!{T<:Float64}(m::Exp1{T},nlp::Vector{T},MM::Matrix{T},MMD::Array{T,3})
-    t=m.t; ke = nlp[1]
-    for i in 1:length(t) updt1!(m,t[i],ke,sub(MM,:,i),sub(MMD,:,:,i)) end
-    MM
+function AsympOrig{T<:FP}(x::Vector{T},y::Vector{T})
+    n = length(x); length(y) == n || error("Dimension mismatch")
+    AsympOrig(reshape(x,(1,n)),y,similar(x),similar(x),Array(T,(2,n)),
+              zeros(T,(1,1,n)),AsympOrigmmf)
 end
-function updtMM!{T<:Float64}(m::Exp1{T},nlp::Matrix{T},MM::Matrix{T},MMD::Array{T,3})
-    t=m.t; for i in 1:length(t) updt1!(m,t[i],nlp[i,1],sub(MM,:,i),sub(MMD,:,:,i)) end
-    MM
+AsympOrig(x::DataVector,y::DataVector) = AsympOrig(float(x),float(y))
+function AsympOrig(f::Formula,dat::AbstractDataFrame)
+    mf = ModelFrame(f,dat)
+    mat = ModelMatrix(mf).m
+    rr = model_response(mf)
+    T = promote_type(eltype(mat),eltype(rr))
+    AsympOrig(convert(Vector{T},mat[:,end]),convert(Vector{T},rr))
+end
+AsympOrig(ex::Expr,dat::AbstractDataFrame) = AsympOrig(Formula(ex),dat)
+pnames(m::AsympOrig) = ["V","ke"]
+function initpars{T<:FP}(m::AsympOrig{T})
+    y = m.y; A0 = maximum(y) + range(y)/4
+    rc =  abs(mean(log(one(T) - y/A0) ./ vec(m.x)))
+    [vec(updtMM!(m,[rc]))\y, rc]
 end
 
 immutable Logsd1{T<:FP} <: NLregMod{T}
@@ -105,6 +118,12 @@ immutable Logsd1{T<:FP} <: NLregMod{T}
     resid::Vector{T}
     tgrad::Matrix{T}
     f::Function
+end
+function Logsd1f(p::StridedVector,x::StridedVector,tg::StridedVector)
+    V = exp(p[1]); nKx1 = -exp(p[2])*x[1] # negative K * x[1]
+    tg[2] = nKx1 * (mm = V*exp(nKx1))
+    tg[1] = V*mm
+    mm
 end
 function Logsd1{T<:FP}(t::Vector{T},y::Vector{T})
     n = length(y); length(t) == n || error("Dimension mismatch")
@@ -118,13 +137,6 @@ function Logsd1(f::Formula,dat::AbstractDataFrame)
 end
 Logsd1(ex::Expr,dat::AbstractDataFrame) = Logsd1(Formula(ex),dat)
 
-function Logsd1f(p::StridedVector,x::StridedVector,tg::StridedVector)
-    x1 = x[1]; V = exp(p[1]); K = exp(p[2])
-    tg[2] = -x1*K*(mm = V*exp(-K*x1))
-    tg[1] = V*mm
-    mm
-end
-
 function initpars{T<:FP}(m::Logsd1{T})
     (n = length(m.y)) < 2 && return [zero(T),-one(T)]
     cc = hcat(ones(n),vec(m.x[1,:]))\log(m.y)
@@ -133,41 +145,65 @@ end
 
 pnames(m::Logsd1) = ["logV","logK"]
 
-immutable BolusSD1{T<:FP} <: NLregMod{T}
+immutable LogBolusSD1{T<:FP} <: PLregMod{T}
     x::Matrix{T}
     y::Vector{T}
     mu::Vector{T}
     resid::Vector{T}
     tgrad::Matrix{T}
-    f::Function
+    MMD::Array{T,3}
+    mmf::Function
 end
-function BolusSD1(x::Matrix,y::Vector,mu::Vector,resid::Vector,tgrad::Matrix)
-    BolusSD1(x,y,mu,resid,tgrad,BolusSD1f)
+function LogBolusSD1mmf(nlpars::StridedVector,x::StridedVector,
+                        tg::StridedVector,MMD::StridedMatrix)
+    nKx1 = -exp(nlpars[1]) * x[1] 
+    MMD[1,1] = nKx1 * (tg[1] = exp(nKx1))
 end
-function BolusSD1{T<:FP}(t::Vector{T},y::Vector{T})
-    n = length(y); length(t) == n || error("Dimension mismatch")
-    BolusSD1(reshape(t,(1,n)),y,similar(y),similar(y),Array(T,(2,n)),BolusSD1f)
+function LogBolusSD1{T<:FP}(x::Vector{T},y::Vector{T})
+    n = length(x); length(y) == n || error("Dimension mismatch")
+    LogBolusSD1(reshape(x,(1,n)),y,similar(x),similar(x),Array(T,(2,n)),
+                zeros(T,(1,1,n)),LogBolusSD1mmf)
 end
-BolusSD1{T<:FP}(t::DataArray{T,1},y::DataArray{T,1}) = BolusSD1(vector(t),vector(y))
-function BolusSD1(f::Formula,dat::AbstractDataFrame)
+LogBolusSD1(x::DataVector,y::DataVector) = LogBolusSD1(float(t),float(y))
+function LogBolusSD1(f::Formula,dat::AbstractDataFrame)
     mf = ModelFrame(f,dat)
-    mm = ModelMatrix(mf)
-    BolusSD1(mm.m[:,end],model_response(mf))
+    x = ModelMatrix(mf).m[:,end]
+    y = model_response(mf)
+    T = promote_type(eltype(x),eltype(y))
+    LogBolusSD1(convert(Vector{T},x),convert(Vector{T},y))
 end
-BolusSD1(ex::Expr,dat::AbstractDataFrame) = BolusSD1(Formula(ex),dat)
+LogBolusSD1(ex::Expr,dat::AbstractDataFrame) = LogBolusSD1(Formula(ex),dat)
 
-function BolusSD1f(pars::StridedVector,xv::StridedVector,tg::StridedVecOrMat)
-    tg[2] = -xv[1]*(mm = pars[1]*(tg[1] = exp(-pars[2]*xv[1])))
-    mm
-end
+pnames(m::LogBolusSD1) = ["V","lK"]
 
-pnames(m::BolusSD1) = ["V","K"]
-
-function initpars{T<:FP}(m::BolusSD1{T})
-    (n = size(m.x,2)) < 2 && return [one(T),exp(-one(T))]
-    cc = hcat(ones(T,n),vec(m.x[1,:]))\log(m.y)
-    [exp(cc[1]),-cc[2]]
+function initpars{T<:FP}(m::LogBolusSD1{T})
+    (n = length(m.y)) < 2 && return [zero(T),-one(T)]
+    cc = hcat(ones(n),vec(m.x[1,:]))\log(m.y)
+    cc[2] < 0. ? [exp(cc[1]),log(-cc[2])] : [exp(cc[1]),-one(T)]
 end
 
+immutable Logis3P{T<:FP} <: PLregMod{T} # three parameter logistic
+    x::Matrix{T}
+    y::Vector{T}
+    mu::Vector{T}
+    resid::Vector{T}
+    tgrad::Matrix{T}
+    MMD::Array{T,3}
+    mmf::Function
+end
+function Logis3Pmmf(nlpars::StridedVector,x::StridedVector,
+                    tg::StridedVector,MMD::StridedMatrix)
+    scal = nlpars[2]
+    ed = exp((nlpars[1] - x[1])/scal) # standardized difference from xmid
+    T = typeof(ed); oo = one(T)
+    oped = oo + ed
+    tg[1] = oo/oped
+    MMD[2,1] = -(MMD[1,1] = -ed/scal/abs2(oped)) * ed
+end
+function Logis3P{T<:FP}(x::Vector{T},y::Vector{T})
+    n = length(x); length(y) == n || error("Dimension mismatch")
+    Logis3P(reshape(x,(1,n)),y,similar(x),similar(x),Array(T,(3,n)),
+            zeros(T,(2,1,n)),Logis3Pmmf)
+end
 
-
+pnames(m::Logis3P) = ["Asym","xmid","scal"]
