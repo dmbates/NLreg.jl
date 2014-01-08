@@ -1,30 +1,36 @@
 abstract PLregMod{T<:FP} <: NLregMod{T}
 
-function updtMM!(m::PLregMod,nlpars::StridedVector)
-    x = m.x; MMD=m.MMD; nnl,nl,n = size(MMD); tg = sub(m.tgrad,1:nl,:)
-    for i in 1:length(m.y)
-        m.mmf(nlpars,sub(x,:,i),sub(tg,:,i),sub(MMD,:,:,i))
-    end
-    tg
-end
-
-mmd(m::PLregMod) = m.MMD
-
-function updtmu!(m::PLregMod,pars::Vector)
-    x = m.x; tg = m.tgrad; MMD = m.MMD
-    nnl,nl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
-    nlpars = sub(pars,nlind); lpars = sub(pars,lind)
-    for i in 1:n
-        m.mmf(nlpars,sub(x,:,i),sub(tg,lind,i),sub(MMD,:,:,i))
-        BLAS.gemv!('T',1.,sub(MMD,:,:,i),lpars,0.,sub(tg,nlind,i))
-    end
-    sumsq(map!(Subtract(),m.resid,m.y,BLAS.gemv!('T',1.,sub(tg,lind,:),lpars,0.,m.mu)))
-end
-
+## default methods for all PLregMod objects
+model_response(m::PLregMod) = m.y
+residuals(m::PLregMod) = m.resid
 size(pl::PLregMod) = size(pl.MMD)
 size(pl::PLregMod,args...) = size(pl.MMD,args...)
 
-type PLinearLS{T<:FP}
+## update the (transposed) model matrix for the linear parameters and MMD, its derivative
+function updtMM!(m::PLregMod,nlpars::StridedVector)
+    x = m.x; MMD=m.MMD; tg = m.tgrad
+### FIXME: Consider changing the arguments to UnsafeVectorView and UnsafeMatrixView
+    for i in 1:size(x,2)
+        m.mmf(nlpars,sub(x,:,i),sub(tg,:,i),sub(MMD,:,:,i))
+    end
+    tg[1:size(m,2),:]
+end
+
+## update mu and resid from full parameter vector returning rss
+function updtmu!(m::PLregMod,pars::Vector)
+    x = m.x; tg = m.tgrad; MMD = m.MMD; mu = m.mu; mmf = m.mmf
+    nnl,nl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
+    nlpars = pars[nlind]; lpars = pars[lind]
+    for i in 1:n
+### FIXME: Consider changing the arguments to UnsafeVectorView and UnsafeMatrixView
+        mmf(nlpars,sub(x,:,i),sub(tg,lind,i),sub(MMD,:,:,i))
+        tg[nlind,i] = MMD[:,:,i] * lpars
+        mu[i] = dot(tg[lind,i],lpars)
+    end
+    sumsq(map!(Subtract(),m.resid,m.y,mu))
+end
+
+type PLinearLS{T<:FP} <: RegressionModel
     m::PLregMod{T}
     qr::QR{T}
     pars::Vector{T}
@@ -47,6 +53,7 @@ function PLinearLS{T<:FP}(m::PLregMod{T})
     nnl,nl,n = size(m)
     PLinearLS(m,initpars(m)[nl + (1:nnl)])
 end
+pnames(pl::PLinearLS) = pnames(pl.m)
 
 function deviance{T<:FP}(pl::PLinearLS{T},nlp::Vector{T})
     m = pl.m; nnl,nl,n = size(m); pars = pl.pars
@@ -55,20 +62,20 @@ function deviance{T<:FP}(pl::PLinearLS{T},nlp::Vector{T})
     copy!(sub(pars,1:nl),qr\m.y)     # conditionally optimal linear pars
     pl.rss = updtmu!(m,pars)         # update mu and evaluate deviance
 end
-deviance(pl::PLinearLS) = ((nnl,nl,n) = size(pl.m);deviance(pl,pl.pars[nl + (1:nnl)]))
+deviance(pl::PLinearLS) = pl.rss
 
 function gpinc{T<:FP}(pl::PLinearLS{T})
-    m = pl.m; nnl,nl,n = size(m); Aphi = m.MMD; B = pl.B; r = pl.m.resid
+    m = pl.m; nnl,nl,n = size(m); Aphi = m.MMD; B = pl.B; r = m.resid; mqr = pl.qr
     lin = 1:nl; lpars = pl.pars[lin]
-    for k in 1:nnl, i in 1:n
-        B[i,k] = dot(lpars,Aphi[k,:,i])
+    for k in 1:nnl
+        B[:,k] = reshape(Aphi[1,:,:],(nl,n))' * lpars
     end
-    LAPACK.gemqrt!('L','T',pl.qr.vs,pl.qr.T,B)
+    LAPACK.gemqrt!('L','T',mqr.vs,mqr.T,B)
     for j in 1:nnl, i in 1:nl
-        B[i,j] = dot(vec(Aphi[i,j,:]),r)
+        B[i,j] = dot(vec(Aphi[j,i,:]),r)
     end
-    BLAS.trsm!('L','U','N','N',1.0,pl.qr[:R],sub(B,lin,:))
-    rhs = pl.qr[:Q]'*m.y; for i in 1:nl rhs[i] = zero(T) end
+    BLAS.trsm!('L','U','N','N',1.0,mqr[:R],sub(B,lin,:))
+    rhs = mqr[:Q]'*m.y; for i in 1:nl rhs[i] = zero(T) end
     st = QR(B); sc = (st[:Q]'*rhs)[1:nnl]
     BLAS.trsv!('U','N','N',sub(st.vs,1:nnl,:),copy!(pl.incr,sc))
     sumsq(sc)/pl.rss
@@ -103,4 +110,43 @@ function gpfit(pl::PLinearLS,verbose::Bool=false) # Golub-Pereyra variable proje
         pl.fit = true
     end
     pl
+end
+
+
+## returns a copy of the current parameter values
+coef(pl::PLinearLS) = copy(pl.pars)
+
+## returns the coefficient table
+function coeftable(pl::PLinearLS)
+    pp = coef(pl); se = stderr(pl); tt = pp ./ se
+    CoefTable (DataFrame({pp, se, tt, ccdf(FDist(1, df_residual(pl)), tt .* tt)},
+                         ["Estimate","Std.Error","t value", "Pr(>|t|)"]),
+               pnames(pl), 4)
+end
+
+size(pl::PLinearLS) = size(pl.m.MMD)
+
+size(pl::PLinearLS,args...) = size(pl.m.MMD,args...)
+    
+function vcov{T<:FP}(pl::PLinearLS{T})
+    nnl,nl,n = size(pl); tg = pl.m.tgrad
+    deviance(pl)/convert(T,n-(nl+nnl)) * inv(cholfact(tg * tg'))
+end
+
+df_residual(pl::PLinearLS) = ((nnl,nl,n) = size(pl);n-(nl+nnl))
+
+model_response(pl::PLinearLS) = pl.m.y
+
+residuals(pl::PLinearLS) = pl.m.resid
+
+function show{T<:FP}(io::IO, pl::PLinearLS{T})
+    gpfit(pl)
+    nnl,nl,n = size(pl); p = nl + nnl
+    s2 = deviance(pl)/convert(T,n-p)
+    println(io, "Nonlinear least squares fit to ", n, " observations")
+## Add a model or modelformula specification in here
+    println(io); show(io, coeftable(pl)); println(io)
+    print(io,"Residual sum of squares at estimates: "); showcompact(io,pl.rss); println(io)
+    print(io,"Residual standard error = ");showcompact(io,sqrt(s2));
+    print(io, " on $(n-p) degrees of freedom")
 end
