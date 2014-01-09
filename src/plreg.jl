@@ -68,7 +68,7 @@ function gpinc{T<:FP}(pl::PLinearLS{T})
     m = pl.m; nnl,nl,n = size(m); Aphi = m.MMD; B = pl.B; r = m.resid; mqr = pl.qr
     lin = 1:nl; lpars = pl.pars[lin]
     for k in 1:nnl
-        B[:,k] = reshape(Aphi[1,:,:],(nl,n))' * lpars
+        B[:,k] = reshape(Aphi[k,:,:],(nl,n))' * lpars
     end
     LAPACK.gemqrt!('L','T',mqr.vs,mqr.T,B)
     for j in 1:nnl, i in 1:nl
@@ -150,3 +150,6 @@ function show{T<:FP}(io::IO, pl::PLinearLS{T})
     print(io,"Residual standard error = ");showcompact(io,sqrt(s2));
     print(io, " on $(n-p) degrees of freedom")
 end
+
+fit(m::PLregMod,verbose::Bool) = gpfit(PLinearLS(m),verbose)
+fit(m::PLregMod) = fit(m,false)

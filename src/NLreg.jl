@@ -15,6 +15,7 @@ module NLreg
     export
         AsympOrig,    # Asymptotic regression through origin  - partially linear
         AsympReg,     # Asymptotic regression model - partially linear
+        Chwirut,      # Model used in the NIST nonlinear regression examples
         LogBolusSD1,  # 1-compartment, single bolus dose model - partially linear, logK
         Logis3P,      # 3-parameter logistic - partially linear
         Logsd1,       # 1-compartment, single bolus dose model with logged parameters
@@ -26,9 +27,7 @@ module NLreg
         NLMM,         # Nonlinear mixed-effects model
         SimpleNLMM,   # Simple population nonlinear mixed-effects model
 
-        gnfit,        # nonlinear least squares by Gauss-Newton
-        gpinc,        # Golub-Pereyra increment
-        gpfit,        # partially linear least squares fit by Golub-Pereyra
+        fit,          # fit the model
         incr!,        # increment the spherical random effects
         initpars,     # create initial values for the parameters
         lowerbd,      # lower bounds on NLMM parameters

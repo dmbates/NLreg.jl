@@ -1,114 +1,151 @@
-immutable MicMen{T<:FP} <: PLregMod{T}
-    x::Matrix{T}
-    y::Vector{T}
-    mu::Vector{T}
-    resid::Vector{T}
-    tgrad::Matrix{T}
-    MMD::Array{T,3}
-    mmf::Function
+
+function Logis3Pmmf(nlpars::StridedVector,x::StridedVector,
+                    tg::StridedVector,MMD::StridedMatrix)
+    scal = nlpars[2]
+    ed = exp((nlpars[1] - x[1])/scal) # standardized difference from xmid
+    T = typeof(ed); oo = one(T)
+    oped = oo + ed
+    tg[1] = oo/oped
+    MMD[2,1] = -(MMD[1,1] = -ed/scal/abs2(oped)) * ed
 end
+
+for (nm, mmf, nnl, nl) in ((:MicMen, :MicMenmmf, 1, 1),
+                           (:AsympReg, :AsympRegmmf, 1, 2),
+                           (:AsympOrig, :AsympOrigmmf, 1, 1),
+                           (:LogBolusSD1, :LogBolusSD1mmf, 1, 1),
+                           (:Logis3P, :Logis3Pmmf, 2, 1),
+                           (:Chwirut, :Chwirutmmf, 2, 1))
+    @eval begin
+        immutable $nm{T<:FP} <: PLregMod{T}
+            x::Matrix{T}
+            y::Vector{T}
+            mu::Vector{T}
+            resid::Vector{T}
+            tgrad::Matrix{T}
+            MMD::Array{T,3}
+            mmf::Function
+        end
+        function $nm{T<:FP}(x::Vector{T},y::Vector{T})
+            n = length(x); length(y) == n || error("Dimension mismatch")
+            $nm(reshape(x,(1,n)),y,similar(y),similar(y),ones(T,($(nl + nnl),n)),
+                zeros(T,($nnl,$nl,n)),$mmf)
+        end
+        $nm(x::DataVector,y::DataVector) = $nm(float(x),float(y))
+        function $nm(f::Formula,dat::AbstractDataFrame)
+            mf = ModelFrame(f,dat)
+            mat = ModelMatrix(mf).m
+            rr = model_response(mf)
+            T = promote_type(eltype(mat),eltype(rr))
+            $nm(convert(Vector{T},mat[:,end]),convert(Vector{T},rr))
+        end
+        $nm(ex::Expr,dat::AbstractDataFrame) = $nm(Formula(ex),dat)
+    end
+end
+    
+### Michaelis-Menten model for enzyme kinetics
 function MicMenmmf(nlpars::StridedVector,x::StridedVector,
                    tg::StridedVector,MMD::StridedMatrix)
     x1 = x[1]
     denom = nlpars[1] + x1
     MMD[1,1] = -(tg[1] =  x1/denom)/denom
 end
-function MicMen{T<:FP}(x::Vector{T},y::Vector{T})
-    n = length(x); length(y) == n || error("Dimension mismatch")
-    MicMen(reshape(x,(1,n)),y,similar(x),similar(x),Array(T,(2,n)),
-           zeros(T,(1,1,n)),MicMenmmf)
-end
-MicMen(x::DataVector,y::DataVector) = MicMen(float(x),float(y))
-function MicMen(f::Formula,dat::AbstractDataFrame)
-    mf = ModelFrame(f,dat)
-    mat = ModelMatrix(mf).m
-    rr = model_response(mf)
-    T = promote_type(eltype(mat),eltype(rr))
-    MicMen(convert(Vector{T},mat[:,end]),convert(Vector{T},rr))
-end
-MicMen(ex::Expr,dat::AbstractDataFrame) = MicMen(Formula(ex),dat)
 
-function initpars(m::MicMen)
-    y = m.y; T = eltype(y)
-    (n = length(y)) < 2 && return [m.y[1],one(T)]
-    cc = hcat(ones(T,n),1. ./ vec(m.x[1,:]))\ (1. ./ m.y)
-    [1.,cc[2]] ./ cc[1]
-end
-    
 pnames(m::MicMen) = ["Vm", "K"]
 
-immutable AsympReg{T<:FP} <: PLregMod{T}
-    x::Matrix{T}
-    y::Vector{T}
-    mu::Vector{T}
-    resid::Vector{T}
-    tgrad::Matrix{T}
-    MMD::Array{T,3}
-    mmf::Function
+function initpars{T<:FP}(m::MicMen{T})
+    y = m.y
+    oo = one(T)
+    (n = length(y)) < 2 && return [m.y[1],oo]
+    cc = linreg(oo ./ vec(m.x[1,:]), (oo ./ m.y))
+    [oo,cc[2]] ./ cc[1]
 end
+
+### Asymptotic Regression model
 function AsympRegmmf(nlpars::StridedVector,x::StridedVector,
                     tg::StridedVector,MMD::StridedMatrix)
     x1 = x[1];
     MMD[2,1] = -x1 *(tg[2] = exp(-nlpars[1]*x1))
 end
-function AsympReg{T<:FP}(x::Vector{T},y::Vector{T})
-    n = length(x); length(y) == n || error("Dimension mismatch")
-    AsympReg(reshape(x,(1,n)),y,similar(x),similar(x),ones(T,(3,n)),
-           zeros(T,(1,2,n)),AsympRegmmf)
-end
-AsympReg(x::DataVector,y::DataVector) = AsympReg(float(x),float(y))
-function AsympReg(f::Formula,dat::AbstractDataFrame)
-    mf = ModelFrame(f,dat)
-    mat = ModelMatrix(mf).m
-    rr = model_response(mf)
-    T = promote_type(eltype(mat),eltype(rr))
-    AsympReg(convert(Vector{T},mat[:,end]),convert(Vector{T},rr))
-end
-AsympReg(ex::Expr,dat::AbstractDataFrame) = AsympReg(Formula(ex),dat)
+
 pnames(m::AsympReg) = ["Asym","delR0","rc"]
 
-function initpars(m::AsympReg)
-    y = m.y; T = eltype(y); n = length(y)
-    miny = minimum(y); maxy = maximum(y)
-    p3 = abs(linreg(m.x[1,:]', log(y .- (miny - convert(T,0.25)*(maxy-miny))))[2])
-    updtMM!(m,[p3])
-    [sub(m.tgrad,1:2,:)'\m.y, p3]
+function initpars{T<:FP}(m::AsympReg{T})
+    y = m.y
+    n = length(y)
+    p3 = abs(linreg(vec(m.x[1,:]), log(y .- (minimum(y) - range(y)/4)))[2])
+    [updtMM!(m,[p3])'\y, p3]
 end
 
-immutable AsympOrig{T<:FP} <: PLregMod{T}
-    x::Matrix{T}
-    y::Vector{T}
-    mu::Vector{T}
-    resid::Vector{T}
-    tgrad::Matrix{T}
-    MMD::Array{T,3}
-    mmf::Function
-end
+### Asymptotic Regression model constrained to pass through the origin
 function AsympOrigmmf(nlpars::StridedVector,x::StridedVector,
                       tg::StridedVector,MMD::StridedMatrix)
     x1 = x[1]; ex = exp(-nlpars[1]*x1)
     MMD[1,1] = x1*ex
     tg[1] =  one(typeof(x1)) - ex
 end
-function AsympOrig{T<:FP}(x::Vector{T},y::Vector{T})
-    n = length(x); length(y) == n || error("Dimension mismatch")
-    AsympOrig(reshape(x,(1,n)),y,similar(x),similar(x),Array(T,(2,n)),
-              zeros(T,(1,1,n)),AsympOrigmmf)
-end
-AsympOrig(x::DataVector,y::DataVector) = AsympOrig(float(x),float(y))
-function AsympOrig(f::Formula,dat::AbstractDataFrame)
-    mf = ModelFrame(f,dat)
-    mat = ModelMatrix(mf).m
-    rr = model_response(mf)
-    T = promote_type(eltype(mat),eltype(rr))
-    AsympOrig(convert(Vector{T},mat[:,end]),convert(Vector{T},rr))
-end
-AsympOrig(ex::Expr,dat::AbstractDataFrame) = AsympOrig(Formula(ex),dat)
+
 pnames(m::AsympOrig) = ["V","ke"]
+
 function initpars{T<:FP}(m::AsympOrig{T})
     y = m.y; A0 = maximum(y) + range(y)/4
     rc =  abs(mean(log(one(T) - y/A0) ./ vec(m.x)))
     [vec(updtMM!(m,[rc]))\y, rc]
+end
+
+### Bolus single dose in measured compartment using logK
+function LogBolusSD1mmf(nlpars::StridedVector,x::StridedVector,
+                        tg::StridedVector,MMD::StridedMatrix)
+    nKx1 = -exp(nlpars[1]) * x[1] 
+    MMD[1,1] = nKx1 * (tg[1] = exp(nKx1))
+end
+
+pnames(m::LogBolusSD1) = ["V","lK"]
+
+function initpars{T<:FP}(m::LogBolusSD1{T})
+    (n = length(m.y)) < 2 && return [zero(T),-one(T)]
+    cc = hcat(ones(n),vec(m.x[1,:]))\log(m.y)
+    cc[2] < 0. ? [exp(cc[1]),log(-cc[2])] : [exp(cc[1]),-one(T)]
+end
+
+### 3-parameter Logistic 
+function Logis3Pmmf(nlpars::StridedVector,x::StridedVector,
+                    tg::StridedVector,MMD::StridedMatrix)
+    scal = nlpars[2]
+    nd = nlpars[1] - x[1]        # negative difference from xmid
+    ed = exp(nd/scal)            # exp of standardized difference
+    oo = one(typeof(ed))
+    oped = oo + ed
+    tg[1] = oo/oped
+    MMD[2,1] = -nd*(MMD[1,1] = -(ed/scal)/abs2(oped))/scal
+end
+
+pnames(m::Logis3P) = ["Asym","xmid","scal"]
+
+function initpars{T<:FP}(m::Logis3P{T})
+    z = m.y
+    if (minz = minimum(z)) < zero(T)  # ensure minimum(z) is positive
+        z -= 1.05 * minz
+    end
+    z = z/(1.05 * maximum(z))           # all z values in (0,1)
+    cc = linreg(log(z ./ (one(T) - z)),vec(m.x))
+    [updtMM!(m,cc)'\m.y,cc]
+end
+
+function Chwirutmmf(nlpars::StridedVector,x::StridedVector,
+                    tg::StridedVector,MMD::StridedMatrix)
+    x1 = x[1]
+    et = exp(-nlpars[1]*x1)
+    denom = 1 + nlpars[2] * x1
+    tg[1] = et/denom
+    etx = et * x1
+    MMD[2,1] = (MMD[1,1] = -etx/denom)/denom
+end
+
+pnames(m::Chwirut) = ["R0","rc","m"]
+
+function initpars(m::Chwirut)
+    npars = [-(linreg(vec(m.x),log(m.y))[2]), mean(m.x)]
+    [vec(updtMM!(m,npars))\m.y,npars]
 end
 
 immutable Logsd1{T<:FP} <: NLregMod{T}
@@ -144,66 +181,3 @@ function initpars{T<:FP}(m::Logsd1{T})
 end
 
 pnames(m::Logsd1) = ["logV","logK"]
-
-immutable LogBolusSD1{T<:FP} <: PLregMod{T}
-    x::Matrix{T}
-    y::Vector{T}
-    mu::Vector{T}
-    resid::Vector{T}
-    tgrad::Matrix{T}
-    MMD::Array{T,3}
-    mmf::Function
-end
-function LogBolusSD1mmf(nlpars::StridedVector,x::StridedVector,
-                        tg::StridedVector,MMD::StridedMatrix)
-    nKx1 = -exp(nlpars[1]) * x[1] 
-    MMD[1,1] = nKx1 * (tg[1] = exp(nKx1))
-end
-function LogBolusSD1{T<:FP}(x::Vector{T},y::Vector{T})
-    n = length(x); length(y) == n || error("Dimension mismatch")
-    LogBolusSD1(reshape(x,(1,n)),y,similar(x),similar(x),Array(T,(2,n)),
-                zeros(T,(1,1,n)),LogBolusSD1mmf)
-end
-LogBolusSD1(x::DataVector,y::DataVector) = LogBolusSD1(float(t),float(y))
-function LogBolusSD1(f::Formula,dat::AbstractDataFrame)
-    mf = ModelFrame(f,dat)
-    x = ModelMatrix(mf).m[:,end]
-    y = model_response(mf)
-    T = promote_type(eltype(x),eltype(y))
-    LogBolusSD1(convert(Vector{T},x),convert(Vector{T},y))
-end
-LogBolusSD1(ex::Expr,dat::AbstractDataFrame) = LogBolusSD1(Formula(ex),dat)
-
-pnames(m::LogBolusSD1) = ["V","lK"]
-
-function initpars{T<:FP}(m::LogBolusSD1{T})
-    (n = length(m.y)) < 2 && return [zero(T),-one(T)]
-    cc = hcat(ones(n),vec(m.x[1,:]))\log(m.y)
-    cc[2] < 0. ? [exp(cc[1]),log(-cc[2])] : [exp(cc[1]),-one(T)]
-end
-
-immutable Logis3P{T<:FP} <: PLregMod{T} # three parameter logistic
-    x::Matrix{T}
-    y::Vector{T}
-    mu::Vector{T}
-    resid::Vector{T}
-    tgrad::Matrix{T}
-    MMD::Array{T,3}
-    mmf::Function
-end
-function Logis3Pmmf(nlpars::StridedVector,x::StridedVector,
-                    tg::StridedVector,MMD::StridedMatrix)
-    scal = nlpars[2]
-    ed = exp((nlpars[1] - x[1])/scal) # standardized difference from xmid
-    T = typeof(ed); oo = one(T)
-    oped = oo + ed
-    tg[1] = oo/oped
-    MMD[2,1] = -(MMD[1,1] = -ed/scal/abs2(oped)) * ed
-end
-function Logis3P{T<:FP}(x::Vector{T},y::Vector{T})
-    n = length(x); length(y) == n || error("Dimension mismatch")
-    Logis3P(reshape(x,(1,n)),y,similar(x),similar(x),Array(T,(3,n)),
-            zeros(T,(2,1,n)),Logis3Pmmf)
-end
-
-pnames(m::Logis3P) = ["Asym","xmid","scal"]
