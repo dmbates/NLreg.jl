@@ -5,27 +5,32 @@ module NLreg
     using Stats: StatisticalModel, RegressionModel
     using Distributions: FDist, ccdf
     using Base.Grisu: _show, PRECISION, FIXED, SHORTEST
-#    using NumericExtensions: sumsq, Subtract
 
     importall Base
     import Distributions: fit
     import Stats: coef, coeftable, confint, deviance, loglikelihood, nobs, stderr, vcov,
                   model_response, predict, residuals, rle
 
-    export
-        AsympOrig,    # Asymptotic regression through origin  - partially linear
-        AsympReg,     # Asymptotic regression model - partially linear
+    export     # Partially linear models
+        AsympOff,     # Asymptotic regression expressed as an offset
+        AsympOrig,    # Asymptotic regression through origin
+        AsympReg,     # Asymptotic regression model
+        Biexp,        # Bi-exponential model
         Chwirut,      # Model used in the NIST nonlinear regression examples
-        LogBolusSD1,  # 1-compartment, single bolus dose model - partially linear, logK
-        Logis3P,      # 3-parameter logistic - partially linear
-        Logsd1,       # 1-compartment, single bolus dose model with logged parameters
-        MicMen,       # Michaelis-Menten model - partially linear
+        Gompertz,     # Gompertz growth model
+        LogBolusSD1,  # 1-compartment, single bolus dose model
+        Logis3P,      # 3-parameter logistic
+        Logis4P,      # 4-parameter logistic
+        MicMen,       # Michaelis-Menten model
+              # types for models and model fits
         NLregMod,     # Nonlinear regression model abstract type
         NonlinearLS,  # Nonlinear least squares fit
         PLinearLS,    # Partially linear regression model fit
         PLregMod,     # Partially linear regression model
         NLMM,         # Nonlinear mixed-effects model
         SimpleNLMM,   # Simple population nonlinear mixed-effects model
+              # Full, nonlinear regression models
+        Logsd1,       # 1-compartment, single bolus dose model with logged parameters
 
         fit,          # fit the model
         incr!,        # increment the spherical random effects

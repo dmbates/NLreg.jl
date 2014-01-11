@@ -6,12 +6,11 @@ residuals(m::PLregMod) = m.resid
 size(pl::PLregMod) = size(pl.MMD)
 size(pl::PLregMod,args...) = size(pl.MMD,args...)
 
-## update the (transposed) model matrix for the linear parameters and MMD, its derivative
-function updtMM!(m::PLregMod,nlpars::StridedVector)
+## update the (transposed) model matrix for the linear parameters and the gradient MMD
+function updtMM!(m::PLregMod,nlpars)
     x = m.x; MMD=m.MMD; tg = m.tgrad
-### FIXME: Consider changing the arguments to UnsafeVectorView and UnsafeMatrixView
     for i in 1:size(x,2)
-        m.mmf(nlpars,sub(x,:,i),sub(tg,:,i),sub(MMD,:,:,i))
+        m.mmf(nlpars,unsafe_view(x,:,i),unsafe_view(tg,:,i),unsafe_view(MMD,:,:,i))
     end
     tg[1:size(m,2),:]
 end
@@ -22,8 +21,7 @@ function updtmu!(m::PLregMod,pars::Vector)
     nnl,nl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
     nlpars = pars[nlind]; lpars = pars[lind]
     for i in 1:n
-### FIXME: Consider changing the arguments to UnsafeVectorView and UnsafeMatrixView
-        mmf(nlpars,sub(x,:,i),sub(tg,lind,i),sub(MMD,:,:,i))
+        mmf(nlpars,unsafe_view(x,:,i),unsafe_view(tg,:,i),unsafe_view(MMD,:,:,i))
         tg[nlind,i] = MMD[:,:,i] * lpars
         mu[i] = dot(tg[lind,i],lpars)
     end
@@ -49,10 +47,9 @@ function PLinearLS{T<:FP}(m::PLregMod{T},nlpars::Vector{T})
     PLinearLS(m, qr, pars, zeros(T,nnl), Array(T,n,nnl), updtmu!(m,pars),
               convert(T,1e-8), convert(T,0.5^10), 1000, false)
 end
-function PLinearLS{T<:FP}(m::PLregMod{T})
-    nnl,nl,n = size(m)
-    PLinearLS(m,initpars(m)[nl + (1:nnl)])
-end
+PLinearLS(m::PLregMod,nlp::Number) = PLinearLS(m,[convert(eltype(m.y),nlp)])
+PLinearLS(m::PLregMod) = PLinearLS(m,initpars(m))
+
 pnames(pl::PLinearLS) = pnames(pl.m)
 
 function deviance{T<:FP}(pl::PLinearLS{T},nlp::Vector{T})
