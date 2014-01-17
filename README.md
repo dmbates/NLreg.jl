@@ -16,7 +16,7 @@ The external constructors for this model allow it to be specified from `t` and `
 A nonlinear regression model must provide methods for `pnames`, the parameter names, `updtmu`, update the mean response, residuals and `tgrad` from new parameter values, and `initpars`, determine initial parameter estimates from the data.
 
 ```jl
-julia> using DataFrames, NLreg, Stats
+julia> using DataFrames, NLreg, StatsBase
 
 julia> const sd1 = within(readtable(Pkg.dir("NLreg","data","sd1.csv.gz")),:(ID = pool(ID)));
 
