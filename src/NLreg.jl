@@ -2,13 +2,13 @@ module NLreg
 
     using DataArrays, DataFrames, NumericExtensions, NLopt, Base.Grisu
     using Base.LinAlg.CHOLMOD: CholmodSparse!, CholmodSparse, CholmodFactor
-    using Stats: StatisticalModel, RegressionModel
+    using StatsBase: StatisticalModel, RegressionModel
     using Distributions: FDist, ccdf
     using Base.Grisu: _show, PRECISION, FIXED, SHORTEST
 
     importall Base
     import Distributions: fit
-    import Stats: coef, coeftable, confint, deviance, loglikelihood, nobs, stderr, vcov,
+    import StatsBase: coef, coeftable, confint, deviance, loglikelihood, nobs, stderr, vcov,
                   model_response, predict, residuals, rle
 
     export     # Partially linear models
