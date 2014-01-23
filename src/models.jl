@@ -104,9 +104,9 @@ end
 pnames(m::LogBolusSD1) = ["V","lK"]
 
 function initpars{T<:FP}(m::LogBolusSD1{T})
-    (n = length(m.y)) < 2 && return [zero(T),-one(T)]
-    cc = hcat(ones(n),vec(m.x[1,:]))\log(m.y)
-    cc[2] < 0. ? [exp(cc[1]),log(-cc[2])] : [exp(cc[1]),-one(T)]
+    (n = length(m.y)) < 2 && return [-one(T)]
+    cc = linreg(vec(m.x[1,:]),log(m.y))
+    [cc[2] < 0. ? log(-cc[2]) : -one(T)]
 end
 
 ### 3-parameter Logistic 
