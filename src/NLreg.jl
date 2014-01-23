@@ -54,7 +54,8 @@ module NLreg
         pvalcol::Integer
         function CoefTable(df::DataFrame,nms::Vector,pvalcol::Int=0)
             nr,nc = size(df)
-            cnms = colnames(df); nnms = length(nms)
+            cnms = names(df)
+            nnms = length(nms)
             0 <= pvalcol <= nc || error("pvalcol = $pvalcol should be in [0,$nc]")
             nnms == 0 || nnms == nr || error("nms should have length 0 or $nr")
             new(df,nms,pvalcol)
@@ -75,7 +76,7 @@ module NLreg
         end
         rnwidth = max(4,maximum([length(nm) for nm in rownms]) + 1)
         rownms = [rpad(nm,rnwidth) for nm in rownms]
-        colnms = colnames(df)
+        colnms = names(df)
         widths = [length(cn)::Int for cn in colnms]
         str = [sprint(showcompact,df[i,j]) for i in 1:nr, j in 1:nc]
         if pvc != 0                         # format the p-values column
