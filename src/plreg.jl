@@ -67,14 +67,14 @@ function gpinc{T<:FP}(pl::PLinearLS{T})
     for k in 1:nnl
         B[:,k] = reshape(Aphi[k,:,:],(nl,n))' * lpars
     end
-    LAPACK.gemqrt!('L','T',mqr.vs,mqr.T,B)
+    LAPACK.gemqrt!('L','T',mqr.factors,mqr.T,B)
     for j in 1:nnl, i in 1:nl
         B[i,j] = dot(vec(Aphi[j,i,:]),r)
     end
     BLAS.trsm!('L','U','N','N',1.0,mqr[:R],sub(B,lin,:))
     rhs = mqr[:Q]'*m.y; for i in 1:nl rhs[i] = zero(T) end
     st = QR(B); sc = (st[:Q]'*rhs)[1:nnl]
-    BLAS.trsv!('U','N','N',sub(st.vs,1:nnl,:),copy!(pl.incr,sc))
+    BLAS.trsv!('U','N','N',sub(st.factors,1:nnl,:),copy!(pl.incr,sc))
     sumsq(sc)/pl.rss
 end
 
