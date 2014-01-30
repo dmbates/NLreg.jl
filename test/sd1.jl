@@ -1,7 +1,7 @@
 using Base.Test
 using DataFrames, NLreg
 
-const sd1 = within(readtable(Pkg.dir("NLreg","data","sd1.csv.gz")),:(ID = pool(ID)));
+const sd1 = within(readtable(Pkg.dir("NLreg","data","sd1.csv.gz")), :(ID = pool(ID)))
 
 # nl = gnfit(NonlinearLS(Logsd1(:(CONC ~ TIME), sd1)),true)
 
