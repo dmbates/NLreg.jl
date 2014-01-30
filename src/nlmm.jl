@@ -38,12 +38,6 @@ function SimpleNLMM(nl::NonlinearLS,inds::Vector,ltype::DataType)
     SimpleNLMM(deepcopy(nl.m),inds,lambda,coef(nl))
 end
 
-A_mul_B!(A::Diagonal,B::Matrix) = scale!(A.diag,B)
-At_mul_B!(A::Diagonal,B::Matrix)= scale!(A.diag,B)
-Ac_mul_B!(A::Diagonal,B::Matrix)= scale!(A.diag,B)
-#A_mul_B!(A::Triangular,B::Matrix) = BLAS.trmm!('L',A.uplo,'N',A.unitdiag,one(eltype(A)),A.UL,B)
-#Ac_mul_B!(A::Triangular,B::Matrix) = BLAS.trmm!('L',A.uplo,'T',A.unitdiag,one(eltype(A)),A.UL,B)
-
 coef(nm::NLMM) = copy(nm.beta)
 
 function coeftable(nm::SimpleNLMM)
