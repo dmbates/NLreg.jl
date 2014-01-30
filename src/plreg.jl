@@ -10,7 +10,7 @@ size(pl::PLregMod,args...) = size(pl.MMD,args...)
 function updtMM!(m::PLregMod,nlpars)
     x = m.x; MMD=m.MMD; tg = m.tgrad
     for i in 1:size(x,2)
-        m.mmf(nlpars,unsafe_view(x,:,i),unsafe_view(tg,:,i),unsafe_view(MMD,:,:,i))
+        m.mmf(nlpars,view(x,:,i),view(tg,:,i),view(MMD,:,:,i))
     end
     tg[1:size(m,2),:]
 end
@@ -21,7 +21,7 @@ function updtmu!(m::PLregMod,pars::Vector)
     nnl,nl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
     nlpars = pars[nlind]; lpars = pars[lind]
     for i in 1:n
-        mmf(nlpars,unsafe_view(x,:,i),unsafe_view(tg,:,i),unsafe_view(MMD,:,:,i))
+        mmf(nlpars,view(x,:,i),view(tg,:,i),view(MMD,:,:,i))
         tg[nlind,i] = MMD[:,:,i] * lpars
         mu[i] = dot(tg[lind,i],lpars)
     end
