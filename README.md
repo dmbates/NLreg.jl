@@ -65,73 +65,59 @@ To fit such a model we create a `MicMen` object from the vector of
 observed concentrations and a `PLregFit` object from this model and
 the responses.
 ```julia
-julia> using RDatasets, NLreg, GLM
+julia> using RDatasets, NLreg
 
-julia> pur = data("datasets",  "Puromycin")[1:12,:]
+julia> purtrt = sub(dataset("datasets","Puromycin"),:(State .== "treated"));
 
-julia> pl = PLregFit(MicMen(pur[:conc]),float(pur[:rate]));
+julia> pm1 = fit(MicMen(Conc ~ Rate, purtrt),true)
+Iteration:  1, rss = 0.188744, cvg = 0.0888416 at [-0.0786133,-220.728]
+   Incr: [-4.66305]  f = 1.0, rss = 0.173277
+Iteration:  2, rss = 0.173277, cvg = 0.00102418 at [-0.0995101,-225.391]
+   Incr: [-0.688546]  f = 1.0, rss = 0.173117
+Iteration:  3, rss = 0.173117, cvg = 6.54049e-6 at [-0.10249,-226.08]
+   Incr: [0.0574836]  f = 1.0, rss = 0.173116
+Iteration:  4, rss = 0.173116, cvg = 7.53229e-8 at [-0.102242,-226.022]
+   Incr: [-0.00614653]  f = 1.0, rss = 0.173116
+Iteration:  5, rss = 0.173116, cvg = 8.30647e-10 at [-0.102269,-226.028]
+   Incr: [0.000645718]  f = 1.0, rss = 0.173116
 
-julia> deviance(pl, [0.06]) # residual sum of squares at K = 0.06
-1223.6796325318303
+Nonlinear least squares fit to 12 observations
 
-julia> gpinc(pl).incr          # increment
-1-element Array{Float64,1}:
- 0.0036186
+      Estimate Std.Error  t value Pr(>|t|)
+Vm   -0.102266 0.0315309 -3.24335   0.0088
+K     -226.028   7.08463 -31.9039  2.2e-11
 
-julia> deviance(pl,pl.pars[2:2]+pl.incr)
-1195.8494418228909
-
-julia> println(pl.pars')
-212.36041696796605	.06361860195046934
-
+Residual sum of squares at estimates: 0.173116
+Residual standard error = 0.131574 on 10 degrees of freedom
 ```
-
-The deviance (residual sum of squares) at an initial value, `K = 0.06`
-is evaluated as is the Golub-Pereyra increment, providing a new value
-of `K` at which the (profiled) deviance is reduced.  This process can
-be continued to convergence.
 
 ## Creating a PLregMod type
 
-A `PLregMod` type a model matrix, usually called `MM`, for the
-conditionally linear parameters, the three-dimensional Jacobian array,
-usually called `MMD`, with each face corresponding to the partial
-derivative of `MM` with respect to one of the nonlinear parameters,
-and the values of any covariates needed to evaluate the model.  There
-must be a method for `newpar`, which updates both arrays for a new value
-of the nonlinear parameters, and a method for `pnames`.
+A `PLregMod` type contains the transposed gradient, usually called
+`tgrad` with the conditionally linear parameters first, the
+three-dimensional Jacobian array, usually called `MMD`, with each face
+corresponding to the partial derivative of the conditionally linear
+rows of `tgrad` with respect to the nonlinear parameters, and the
+values of any covariates needed to evaluate the model.  The
+model-matrix function, `mmf`, is a function of two read-only
+arguments; `nlp`, the nonlinear parameters in the model function as a
+vector and x the covariates for a single observation, also as a
+vector, and two arguments, `tg` and `MMD` that are updated in the
+function.  The `tg` vector is updated with the model matrix for the
+conditionally linear parameters and the `MMD` slice, considered as a
+matrix, is updated with the gradient.
 
-For the Michaelis-Menten model these are
+For the Michaelis-Menten model the model-matrix function is
 ```julia
-immutable MicMen{T<:Float64} <: PLregMod{T}
-    x::Vector{T}
-    MM::Matrix{T}
-    MMD::Array{T,3}
-end
-MicMen{T<:Float64}(x::Vector{T}) = (n = length(x); MicMen(x, Array(T,n,1), Array(T,n,1,1)))
-pnames(m::MicMen) = ["Vm", "K"]
-
-function newpar{T<:Float64}(m::MicMen{T},K::T)
-    x = m.x; MM = m.MM; MMD = m.MMD
-    for i in 1:length(x)
-        xi = x[i]
-        denom = K + xi
-        MMD[i,1,1] = -(MM[i,1] =  xi/denom)/denom
-    end
-    MM
-end
-function newpar{T<:Float64}(m::MicMen{T},nlp::Vector{T})
-    length(nlp) == 1 ? newpar(m,nlp[1]) : error("length(nlp) should be 1")
+function MicMenmmf(nlp,x,tg,MMD)
+    x1 = x[1]
+    denom = nlp[1] + x1
+    MMD[1,1] = -(tg[1] =  x1/denom)/denom
 end
 ```
+The arguments are untyped, to allow for submatrices or views of
+matrices and arrays, but they should be treated as three vectors and a
+matrix, for the purposes of indexing.
 
-A `MicMen` object contains the vector of concentrations, the model
-matrix and its Jacobian.  If the vector of concentrations is of length
-`n` then the model matrix is of size `n` by `1` and the Jacobian is
-of size `n` by `1` by `1`.  When a new value of `K` becomes available
-the model matrix is evaluated as `x./(K+x)` and the Jacobian as
-`-x./abs2(K+x)`.  An explicit loop is used here to avoid allocation of
-temporaries, although this is probably not necessary in any reasonable
-size of data set.
 
 
