@@ -5,6 +5,7 @@ module NLreg
     using StatsBase: StatisticalModel, RegressionModel
     using Distributions: FDist, ccdf
     using Base.Grisu: _show, PRECISION, FIXED, SHORTEST
+    using Base.LinAlg.QRCompactWY
 
     importall Base
     import Distributions: fit

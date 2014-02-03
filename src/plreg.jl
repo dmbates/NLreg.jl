@@ -30,7 +30,7 @@ end
 
 type PLinearLS{T<:FP} <: RegressionModel
     m::PLregMod{T}
-    qr::QR{T}
+    qr::QRCompactWY{T}
     pars::Vector{T}
     incr::Vector{T}
     B::Matrix{T}
@@ -42,8 +42,8 @@ type PLinearLS{T<:FP} <: RegressionModel
 end
 function PLinearLS{T<:FP}(m::PLregMod{T},nlpars::Vector{T})
     nnl,nl,n = size(m); length(nlpars) == nnl || error("Dimension mismatch")
-    qr = QR(updtMM!(m,nlpars)')
-    pars = [qr\m.y,nlpars]
+    qr = qrfact!(updtMM!(m,nlpars)')
+    pars = [vec(qr\m.y),nlpars]
     PLinearLS(m, qr, pars, zeros(T,nnl), Array(T,n,nnl), updtmu!(m,pars),
               convert(T,1e-8), convert(T,0.5^10), 1000, false)
 end
@@ -55,7 +55,7 @@ pnames(pl::PLinearLS) = pnames(pl.m)
 function deviance{T<:FP}(pl::PLinearLS{T},nlp::Vector{T})
     m = pl.m; nnl,nl,n = size(m); pars = pl.pars
     copy!(sub(pars,nl + (1:nnl)), nlp)   # record nl pars
-    pl.qr = qr = QR(updtMM!(m,nlp)') # update and decompose lin pars model matrix
+    pl.qr = qr = qrfact!(updtMM!(m,nlp)') # update and decompose lin pars model matrix
     copy!(sub(pars,1:nl),qr\m.y)     # conditionally optimal linear pars
     pl.rss = updtmu!(m,pars)         # update mu and evaluate deviance
 end
@@ -73,7 +73,7 @@ function gpinc{T<:FP}(pl::PLinearLS{T})
     end
     BLAS.trsm!('L','U','N','N',1.0,mqr[:R],sub(B,lin,:))
     rhs = mqr[:Q]'*m.y; for i in 1:nl rhs[i] = zero(T) end
-    st = QR(B); sc = (st[:Q]'*rhs)[1:nnl]
+    st = qrfact(B); sc = (st[:Q]'*rhs)[1:nnl]
     BLAS.trsv!('U','N','N',sub(st.factors,1:nnl,:),copy!(pl.incr,sc))
     sumsq(sc)/pl.rss
 end
