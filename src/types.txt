@@ -1,0 +1,35 @@
+Types tree for nonlinear model functions and fitted models
+==========================================================
+
+Model functions
+---------------
+
+Using
+
+~~~~ {.jl}
+typealias FloatingPoint FP
+~~~~
+
+the following types are defined
+
+-   `abstract NLregModF{T<:FP}` nonlinear regression model
+    -   must provide methods for `updtmu!`, `model_response` and `npars`
+
+-   `abstract PLregModF{T<:FP}` partially linear regression model
+    -   provides methods for `updtMM!` in addition to `updtmu!`
+
+-   `type CompositeModF{T<:FP}` nonlinear regression model with
+    parameter transformation(s)
+
+-   `type CompositePLModF{T<:FP}` composite partially linear model
+
+Fitted models
+-------------
+
+-   `abstract StatisticalModel`
+    -   `abstract RegressionModel`
+        -   `abstract NonlinearLS`
+            -   `type FullNonlinearLS`\
+            -   `type PLinearLS`
+
+
