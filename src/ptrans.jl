@@ -1,7 +1,4 @@
-import Base.length
-
 abstract Ptrans
-
 abstract Strans                         # scalar parameter transformation
 
 type Dtrans <: Ptrans                   # diagonal (i.e. vector of scalars)
@@ -14,9 +11,10 @@ type Dtrans <: Ptrans                   # diagonal (i.e. vector of scalars)
     end
 end
 
-length(d::Dtrans) = length(d.vv)
 getindex(d::Dtrans,i) = d.vv[i]
-    
+
+length(d::Dtrans) = length(d.vv)
+
 function parjac(d::Dtrans, inpar::Vector)
     (p = length(d)) == length(inpar) || error("DimensionMismatch")
     outpar = similar(inpar)
@@ -35,8 +33,11 @@ end
 type ExpTr <: Strans end                # exponential transformation
 parjac(::Type{ExpTr}, x) = (ex = exp(x); (ex, ex))
 pnames(::Type{ExpTr}, nm) = "log(" * nm * ")"
+invtrans(::Type{ExpTr}, x) = log(x)
 
 type IdTr <: Strans end                 # identity transformation
-parjac(::Type{IdTr}, x) = (exp(x),one(x))
+parjac(::Type{IdTr}, x) = (x,one(x))
 pnames(::Type{IdTr}, nm) = nm
+invtrans(::Type{IdTr}, x) = x
+
 

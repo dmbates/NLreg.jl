@@ -23,13 +23,21 @@ module NLreg
         Logis3P,      # 3-parameter logistic
         Logis4P,      # 4-parameter logistic
         MicMen,       # Michaelis-Menten model
-              # types for models and model fits
-        NLregMod,     # Nonlinear regression model abstract type
-        NonlinearLS,  # Nonlinear least squares fit
-        PLinearLS,    # Partially linear regression model fit
-        PLregMod,     # Partially linear regression model
-        NLMM,         # Nonlinear mixed-effects model
-        SimpleNLMM,   # Simple population nonlinear mixed-effects model
+              # types for models functions and model fits
+        CompositeModF,   # Nonlinear regression model function with parameter transformation
+        CompositePLModF, # Partially linear regression model function with parameter trans
+        NLregModF,       # Nonlinear regression model function
+        NonlinearLS,     # Nonlinear least squares model
+        PLinearLS,       # Partially linear regression model
+        PLregModF,       # Partially linear regression model function
+        NLMM,            # Nonlinear mixed-effects model
+        SimpleNLMM,      # Simple population nonlinear mixed-effects model
+              # parameter transformations
+        Dtrans,          # diagonal parameter transformation
+        ExpTr,           # scalar exponential transformation
+        IdTr,            # scalar identity transformation
+        Ptrans,          # abstract parameter transformation
+        Strans,          # scalar parameter transformation
               # Full, nonlinear regression models
         Logsd1,       # 1-compartment, single bolus dose model with logged parameters
 
@@ -37,6 +45,7 @@ module NLreg
         incr!,        # increment the spherical random effects
         initpars,     # create initial values for the parameters
         lowerbd,      # lower bounds on NLMM parameters
+        npars,        # total number of parameters in an NLregMod
         pnames,       # names of parameters in a model
         pnls!,        # penalized nonlinear least squares fit
         prss!,        # penalized rss for b = lambda * (u + fac*delu)
@@ -109,5 +118,8 @@ module NLreg
     include("plreg.jl")
     include("models.jl")
     include("nlmm.jl")
+    include("simplenlmm.jl")
+    include("ptrans.jl")
+    include("compositemodel.jl")
 
 end # module

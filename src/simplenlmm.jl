@@ -3,7 +3,7 @@
 ## nonlinear model
 
 type SimpleNLMM{T<:FP} <: NLMM{T}
-    m::NLregMod{T}
+    m::NLregModF{T}
     inds::Vector               # grouping factor indices
     nrep::Vector               # run-length encoding of inds
     lambda::AbstractMatrix{T}  # template block for Lambda
@@ -18,7 +18,7 @@ type SimpleNLMM{T<:FP} <: NLMM{T}
     minfac::T                  # minimum step factor in PNLS
     tolsqr::T                  # squared tolerance for orthogonality conv.crit.
 end
-function SimpleNLMM{T<:FP}(m::NLregMod{T},inds::Vector,
+function SimpleNLMM{T<:FP}(m::NLregModF{T},inds::Vector,
                            lambda::AbstractMatrix{T},beta::Vector{T})
     n = size(m)[end]; p = npars(m); np = n*p; ui, nrep = rle(inds); ni = length(ui)
     length(inds) == n || error("length(inds) = $(length(inds)), should be $n")

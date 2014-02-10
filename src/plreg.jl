@@ -1,35 +1,103 @@
-abstract PLregMod{T<:FP} <: NLregMod{T}
+vcov(rm::RegressionModel) = scale(rm,true) * unscaledvcov(rm)
 
-## default methods for all PLregMod objects
-model_response(m::PLregMod) = m.y
-residuals(m::PLregMod) = m.resid
-size(pl::PLregMod) = size(pl.MMD)
-size(pl::PLregMod,args...) = size(pl.MMD,args...)
-
-## update the (transposed) model matrix for the linear parameters and the gradient MMD
-function updtMM!(m::PLregMod,nlpars)
-    x = m.x; MMD=m.MMD; tg = m.tgrad
-    for i in 1:size(x,2)
-        m.mmf(nlpars,view(x,:,i),view(tg,:,i),view(MMD,:,:,i))
-    end
-    tg[1:size(m,2),:]
+type NonlinearLS{T<:FP} <: RegressionModel # nonlinear least squares fits
+    m::NLregModF{T}
+    pars::Vector{T}
+    incr::Vector{T}
+    ch::Cholesky{T}
+    rss::T      # residual sum of squares at last successful iteration
+    tolsqr::T   # squared tolerance for orthogonality criterion
+    minfac::T
+    mxiter::Int
+    fit::Bool
 end
-
-## update mu and resid from full parameter vector returning rss
-function updtmu!(m::PLregMod,pars::Vector)
-    x = m.x; tg = m.tgrad; MMD = m.MMD; mu = m.mu; mmf = m.mmf
-    nnl,nl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
-    nlpars = pars[nlind]; lpars = pars[lind]
-    for i in 1:n
-        mmf(nlpars,view(x,:,i),view(tg,:,i),view(MMD,:,:,i))
-        tg[nlind,i] = MMD[:,:,i] * lpars
-        mu[i] = dot(tg[lind,i],lpars)
+function NonlinearLS{T<:FP}(m::NLregModF{T},init::Vector{T})
+    p,n = size(m)
+    if isa(m,PLregMod)
+        nnl,nl,n = size(m)
+        p = nl + nnl
     end
-    sumsq(map!(Subtract(),m.resid,m.y,mu))
+    length(init) == p || error("Dimension mismatch")
+    rss = updtmu!(m, init); tg = m.tgrad
+    NonlinearLS(m, init, zeros(T,p), cholfact(eye(p)), rss, 1e-8, 0.5^10, 1000, false)
 end
+NonlinearLS{T<:FP}(m::NLregModF{T}) = NonlinearLS(m, initpars(m))
+ 
+## returns a copy of the current parameter values
+coef(nl::NonlinearLS) = copy(nl.pars)
+
+## returns the coefficient table
+function coeftable(nl::NonlinearLS)
+    pp = coef(nl); se = stderr(nl); tt = pp ./ se
+    CoefTable (DataFrame({pp, se, tt, ccdf(FDist(1, df_residual(nl)), tt .* tt)},
+                         ["Estimate","Std.Error","t value", "Pr(>|t|)"]),
+               pnames(nl), 4)
+end
+ 
+deviance(nl::NonlinearLS) = nl.rss
+df_residual(nl::NonlinearLS) = ((p,n) = size(nl);n-p)
+function gnfit(nl::NonlinearLS,verbose::Bool=false) # Gauss-Newton nonlinear least squares
+    if !nl.fit
+        m = nl.m; pars = nl.pars; incr = nl.incr; minf = nl.minfac; cvg = 2(tol = nl.tolsqr)
+        r = m.resid; tg = m.tgrad; ch = nl.ch; nl.rss = rss = updtmu!(m,pars); UL = ch.UL
+        for i in 1:nl.mxiter
+            ## Create the Cholesky factor of tg * tg' in place
+            _,info = LAPACK.potrf!('U',BLAS.syrk!('U','N',1.,tg,0.,UL))
+            info == 0 || error("Singular gradient matrix at pars = $(pars')")
+            ## solve in place for the Gauss-Newton increment - done in two stages
+            ## to be able to evaluate the orthogonality convergence criterion
+            cvg = sumsq(BLAS.trsv!('U','T','N',UL,BLAS.gemv!('N',1.,tg,r,0.,incr)))/rss
+            if verbose
+                print("Iteration:",lpad(string(i),3),", rss = "); showcompact(rss)
+                print(", cvg = "); showcompact(cvg); print(" at "); showcompact(pars)
+                println()
+            end
+            BLAS.trsv!('U','N','N',UL,incr)
+            if verbose
+                print("   Incr: ")
+                showcompact(incr)
+            end
+            f = 1.
+            while true
+                f >= minf || error("Failure to reduce rss at $(pars') with incr = $(incr') and minfac = $minf")
+                rss = updtmu!(nl.m, pars + f * incr)
+                if verbose
+                    print("  f = ",f,", rss = "); showcompact(rss); println()
+                end
+                rss < nl.rss && break
+                f *= 0.5                    # step-halving
+            end
+            cvg < tol && break
+            pars += f * incr
+            nl.rss = rss
+        end
+        verbose && println()
+        copy!(nl.pars,pars)
+        cvg < tol || error("failure to converge in $(nl.mxiter) iterations")
+        nl.fit = true
+    end
+    nl
+end
+model(nl::NonlinearLS) = nl.m
+nobs(nl::NonlinearLS) = size(nl,2)
+pnames(nl::NonlinearLS) = pnames(model(nl))
+
+function show{T<:FP}(io::IO, nl::NonlinearLS{T})
+    gnfit(nl)
+    p,n = size(nl)
+    s2 = deviance(nl)/convert(T,n-p)
+    println(io, "Nonlinear least squares fit to ", n, " observations")
+    ## Add a model or modelformula specification in here
+    println(io); show(io, coeftable(nl)); println(io)
+    print(io,"Residual sum of squares at estimates: "); showcompact(io,nl.rss); println(io)
+    print(io,"Residual standard error = ");showcompact(io,sqrt(s2));
+    print(io, " on $(n-p) degrees of freedom")
+end
+size(nl::NonlinearLS) = size(tgrad(model(nl)))
+size(nl::NonlinearLS,args...) = size(tgrad(model(nl)),args...)
 
 type PLinearLS{T<:FP} <: RegressionModel
-    m::PLregMod{T}
+    m::PLregModF{T}
     qr::QRCompactWY{T}
     pars::Vector{T}
     incr::Vector{T}
@@ -40,29 +108,29 @@ type PLinearLS{T<:FP} <: RegressionModel
     mxiter::Int
     fit::Bool
 end
-function PLinearLS{T<:FP}(m::PLregMod{T},nlpars::Vector{T})
+function PLinearLS{T<:FP}(m::PLregModF{T},nlpars::Vector{T})
     nnl,nl,n = size(m); length(nlpars) == nnl || error("Dimension mismatch")
     qr = qrfact!(updtMM!(m,nlpars)')
-    pars = [vec(qr\m.y),nlpars]
+    pars = [vec(qr\model_response(m)),nlpars]
     PLinearLS(m, qr, pars, zeros(T,nnl), Array(T,n,nnl), updtmu!(m,pars),
               convert(T,1e-8), convert(T,0.5^10), 1000, false)
 end
-PLinearLS(m::PLregMod,nlp::Number) = PLinearLS(m,[convert(eltype(m.y),nlp)])
-PLinearLS(m::PLregMod) = PLinearLS(m,initpars(m))
+PLinearLS(m::PLregModF) = PLinearLS(m,initpars(m))
 
 pnames(pl::PLinearLS) = pnames(pl.m)
 
 function deviance{T<:FP}(pl::PLinearLS{T},nlp::Vector{T})
     m = pl.m; nnl,nl,n = size(m); pars = pl.pars
-    copy!(sub(pars,nl + (1:nnl)), nlp)   # record nl pars
+    copy!(view(pars,nl + (1:nnl)), nlp)   # record nl pars
     pl.qr = qr = qrfact!(updtMM!(m,nlp)') # update and decompose lin pars model matrix
-    copy!(sub(pars,1:nl),qr\m.y)     # conditionally optimal linear pars
+    copy!(view(pars,1:nl),qr\model_response(m))     # conditionally optimal linear pars
     pl.rss = updtmu!(m,pars)         # update mu and evaluate deviance
 end
 deviance(pl::PLinearLS) = pl.rss
 
 function gpinc{T<:FP}(pl::PLinearLS{T})
-    m = pl.m; nnl,nl,n = size(m); Aphi = m.MMD; B = pl.B; r = m.resid; mqr = pl.qr
+    m = pl.m; nnl,nl,n = size(m); Aphi = mmjac(m); B = pl.B
+    r = residuals(m); mqr = pl.qr
     lin = 1:nl; lpars = pl.pars[lin]
     for k in 1:nnl
         B[:,k] = reshape(Aphi[k,:,:],(nl,n))' * lpars
@@ -72,7 +140,7 @@ function gpinc{T<:FP}(pl::PLinearLS{T})
         B[i,j] = dot(vec(Aphi[j,i,:]),r)
     end
     BLAS.trsm!('L','U','N','N',1.0,mqr[:R],sub(B,lin,:))
-    rhs = mqr[:Q]'*m.y; for i in 1:nl rhs[i] = zero(T) end
+    rhs = mqr[:Q]'*model_response(m); for i in 1:nl rhs[i] = zero(T) end
     st = qrfact(B); sc = (st[:Q]'*rhs)[1:nnl]
     BLAS.trsv!('U','N','N',sub(st.factors,1:nnl,:),copy!(pl.incr,sc))
     sumsq(sc)/pl.rss
@@ -109,7 +177,6 @@ function gpfit(pl::PLinearLS,verbose::Bool=false) # Golub-Pereyra variable proje
     pl
 end
 
-
 ## returns a copy of the current parameter values
 coef(pl::PLinearLS) = copy(pl.pars)
 
@@ -121,32 +188,34 @@ function coeftable(pl::PLinearLS)
                pnames(pl), 4)
 end
 
-size(pl::PLinearLS) = size(pl.m.MMD)
+df_residual(pl::PLinearLS) = nobs(pl) - npars(pl)
 
-size(pl::PLinearLS,args...) = size(pl.m.MMD,args...)
-    
-function vcov{T<:FP}(pl::PLinearLS{T})
-    nnl,nl,n = size(pl); tg = pl.m.tgrad
-    deviance(pl)/convert(T,n-(nl+nnl)) * inv(cholfact(tg * tg'))
+fit(m::PLregModF,verbose=false) = gpfit(PLinearLS(m),verbose)
+
+model_response(pl::PLinearLS) = model_response(pl.m)
+
+npars(pl::PLinearLS) = npars(pl.m)
+
+function scale(pl::PLinearLS,sqr=false)
+    scsq = deviance(pl)/df_residual(pl)
+    sqr ? scsq : sqrt(scsq)
 end
 
-df_residual(pl::PLinearLS) = ((nnl,nl,n) = size(pl);n-(nl+nnl))
-
-model_response(pl::PLinearLS) = pl.m.y
-
-residuals(pl::PLinearLS) = pl.m.resid
+residuals(pl::PLinearLS) = residuals(pl.m)
 
 function show{T<:FP}(io::IO, pl::PLinearLS{T})
     gpfit(pl)
-    nnl,nl,n = size(pl); p = nl + nnl
-    s2 = deviance(pl)/convert(T,n-p)
-    println(io, "Nonlinear least squares fit to ", n, " observations")
+    println(io, "Nonlinear least squares fit to $(nobs(pl)) observations")
 ## Add a model or modelformula specification in here
     println(io); show(io, coeftable(pl)); println(io)
     print(io,"Residual sum of squares at estimates: "); showcompact(io,pl.rss); println(io)
-    print(io,"Residual standard error = ");showcompact(io,sqrt(s2));
-    print(io, " on $(n-p) degrees of freedom")
+    print(io,"Residual standard error = ");showcompact(io,scale(pl));
+    print(io, " on $(df_residual(pl)) degrees of freedom")
 end
 
-fit(m::PLregMod,verbose::Bool) = gpfit(PLinearLS(m),verbose)
-fit(m::PLregMod) = fit(m,false)
+size(pl::PLinearLS) = size(pl.m)
+
+size(pl::PLinearLS,args...) = size(pl.m,args...)
+
+vcov(pl::PLinearLS) = scale(pl,true) * unscaledvcov(pl.m)
+

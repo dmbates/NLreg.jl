@@ -9,7 +9,7 @@ for (nm, mmf, nnl, nl) in ((:AsympReg, :AsympRegmmf, 1, 2),
                            (:Chwirut, :Chwirutmmf, 2, 1),
                            (:MicMen, :MicMenmmf, 1, 1))
     @eval begin
-        immutable $nm{T<:FP} <: PLregMod{T}
+        immutable $nm{T<:FP} <: PLregModF{T}
             x::Matrix{T}
             y::Vector{T}
             mu::Vector{T}
@@ -48,7 +48,7 @@ function initpars(m::MicMen)
     x = vec(m.x); y = m.y
     length(y) < 2 && return [one(eltype(y))]
     cc = linreg(rcp(x), rcp(y))
-    cc[2] / cc[1]
+    [cc[2] / cc[1]]
 end
 
 ### Asymptotic Regression model
@@ -62,7 +62,7 @@ pnames(m::AsympReg) = ["Asym","R0","rc"]
 
 function initpars(m::AsympReg)
     y = m.y
-    abs(linreg(vec(m.x), log((y-minimum(y))+range(y)/4))[2])
+    [abs(linreg(vec(m.x), log((y-minimum(y))+range(y)/4))[2])]
 end
 
 ### Asymptotic Regression model constrained to pass through the origin
@@ -77,7 +77,7 @@ pnames(m::AsympOrig) = ["V","ke"]
 function initpars(m::AsympOrig)
     y = m.y
     A0 = maximum(y) + range(y)/4
-    abs(mean(log(1 - y/A0) ./ vec(m.x)))
+    [abs(mean(log(1 - y/A0) ./ vec(m.x)))]
 end
 
 ### Asymptotic Regression model expressed with an offset in x
@@ -202,7 +202,7 @@ pnames(m::Chwirut) = ["R0","rc","m"]
 
 initpars(m::Chwirut) = [-(linreg(vec(m.x),log(m.y))[2]), mean(m.x)]
 
-immutable Logsd1{T<:FP} <: NLregMod{T}
+immutable Logsd1{T<:FP} <: NLregModF{T}
     x::Matrix{T}
     y::Vector{T}
     mu::Vector{T}
@@ -231,7 +231,7 @@ Logsd1(ex::Expr,dat::AbstractDataFrame) = Logsd1(Formula(ex),dat)
 function initpars{T<:FP}(m::Logsd1{T})
     (n = length(m.y)) < 2 && return [zero(T),-one(T)]
     cc = hcat(ones(n),vec(m.x[1,:]))\log(m.y)
-    cc[2] < 0. ? [cc[1],log(-cc[2])] : [cc[1],-one(T)]
+    [cc[2] < 0. ? [cc[1],log(-cc[2])] : [cc[1],-one(T)]]
 end
 
 pnames(m::Logsd1) = ["logV","logK"]

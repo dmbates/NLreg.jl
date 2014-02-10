@@ -1,143 +1,125 @@
-abstract NLregMod{T<:FP}
+abstract NLregModF{T<:FP}
 
-## default methods for all NLregMod objects
-model_response(m::NLregMod) = m.y
+## default methods for all NLregModF objects
+covariatemat(m::NLregModF)   = m.x
+expctd(m::NLregModF)         = m.mu
+model_response(m::NLregModF) = m.y
+nobs(m::NLregModF)           = length(model_response(m))
+npars(m::NLregModF)          = size(tgrad(m),1)
+mufunc(m::NLregModF)         = m.f
+residuals(m::NLregModF)      = m.resid
+size(m::NLregModF)           = size(tgrad(m))
+size(m::NLregModF,args...)   = size(tgrad(m),args...)
+tgrad(m::NLregModF)          = m.tgrad # transposed gradient matrix
+unscaledvcov(m::NLregModF)   = inv(cholfact(tgrad(m) * tgrad(m)'))
 
-residuals(m::NLregMod) = m.resid
-
-size(m::NLregMod) = size(m.tgrad)
-size(m::NLregMod,args...) = size(m.tgrad,args...)
-
-function updtmu!(m::NLregMod, pars::Vector)
-    x = m.x; mu = m.mu; tgrad = m.tgrad;
-    y = m.y; r = m.resid; rss = zero(eltype(mu))
+## update the expected response and residuals, returning the sum of squared residuals
+function updtmu!(m::NLregModF, pars::Vector)
+    length(pars) == npars(m) || error("DimensionMismatch")
+    f  = mufunc(m)
+    mu = expctd(mu)
+    r  = residuals(m)
+    tg = tgrad(m)
+    x  = covariatemat(m)
+    y  = model_response(m)
     for i in 1:length(y)
-        mu[i] = m.f(pars,sub(x,:,i),sub(tgrad,:,i)) # pass subarrays by reference
+        mu[i] = f(pars,view(x,:,i),view(tgrad,:,i)) # pass subarrays by reference, not copies
         r[i] = y[i] - mu[i]
         rss += abs2(r[i])
     end
     rss
 end
-function updtmu!(m::NLregMod, pars::Matrix, inds::Vector)
-    x = m.x; mu = m.mu; tgrad = m.tgrad; k,n = size(tgrad); rss = zero(eltype(mu))
-    length(inds) == n && size(pars,1) == k || error("Dimension mismatch")
-    y = m.y; r = m.resid; ii = 0
+
+function updtmu!(m::NLregModF, pars::Matrix, inds::Vector)
+    (n == nobs(m)) == length(inds) && size(pars,1) == npars(m) || error("DimensionMismatch")
+    f  = mufunc(m)
+    mu = expctd(mu)
+    r  = residuals(m)
+    tg = tgrad(m)
+    x  = covariatemat(m)
+    y  = model_response(m)
+    ii = 0; rss = zero(eltype(mu))
     for i in 1:n
         if ii != inds[i]
             ii = inds[i]
+            pp = view(pars,:,ii)
         end
-        mu[i] = m.f(sub(pars,:,ii),sub(x,:,i),sub(tgrad,:,i))
-        r[i] = y[i] - mu[i]
+        mu[i] = f(pp,view(x,:,i),view(tgrad,:,i))
+        r[i]  = y[i] - mu[i]
+        rss  += abs2(r[i])
+    end
+    rss
+end
+
+abstract PLregModF{T<:FP} <: NLregModF{T}
+
+## default methods for all PLregModF objects
+mmjac(m::PLregModF)        = m.MMD       # model-matrix derivative (Jacobian)
+mmfunc(m::PLregModF)       = m.mmf       # model-matrix update function
+size(m::PLregModF)         = size(mmjac(m))
+size(m::PLregModF,args...) = size(mmjac(m),args...)
+
+## update the (transposed) model matrix for the linear parameters and the gradient MMD
+function updtMM!(m::PLregModF,nlpars)
+    mmd = mmjac(m)
+    mmf = mmfunc(m)
+    tg  = tgrad(m)
+    x   = covariatemat(m)
+    y   = model_response(m)
+    for i in 1:size(x,2)
+        mmf(nlpars,view(x,:,i),view(tg,:,i),view(mmd,:,:,i))
+    end
+    tg[1:size(m,2),:]
+end
+
+## update mu and resid from full parameter vector returning rss
+function updtmu!(m::PLregModF,pars::Vector)
+    length(pars) == npars(m) || error("DimensionMismatch")
+    mmd = mmjac(m)
+    mmf = mmfunc(m)
+    mu  = expctd(m)
+    r   = residuals(m)
+    tg  = tgrad(m)
+    x   = covariatemat(m)
+    y   = model_response(m)
+    nnl,nl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
+    nlpars = view(pars,nlind); lpars = view(pars,lind)
+    rss = zero(eltype(mu))
+    for i in 1:n
+        mmdi = view(mmd,:,:,i)
+        mmf(nlpars,view(x,:,i),view(tg,:,i),mmdi)
+        tg[nlind,i] = mmdi * lpars
+        r[i] = y[i] - (mu[i] = dot(view(tg,lind,i),lpars))
         rss += abs2(r[i])
     end
     rss
 end
-updtmu!(m::NLregMod, p::Matrix) = updtmu!(m,p,1:length(m.y))
 
-type NonlinearLS{T<:FP} <: RegressionModel # nonlinear least squares fits
-    m::NLregMod{T}
-    pars::Vector{T}
-    incr::Vector{T}
-    ch::Cholesky{T}
-    rss::T      # residual sum of squares at last successful iteration
-    tolsqr::T   # squared tolerance for orthogonality criterion
-    minfac::T
-    mxiter::Int
-    fit::Bool
-end
-function NonlinearLS{T<:FP}(m::NLregMod{T},init::Vector{T})
-    p,n = size(m)
-    if isa(m,PLregMod)
-        nnl,nl,n = size(m)
-        p = nl + nnl
-    end
-    length(init) == p || error("Dimension mismatch")
-    rss = updtmu!(m, init); tg = m.tgrad
-    NonlinearLS(m, init, zeros(T,p), cholfact(eye(p)), rss, 1e-8, 0.5^10, 1000, false)
-end
-NonlinearLS{T<:FP}(m::NLregMod{T}) = NonlinearLS(m, initpars(m))
-
-## returns a copy of the current parameter values
-coef(nl::NonlinearLS) = copy(nl.pars)
-
-## returns the coefficient table
-function coeftable(nl::NonlinearLS)
-    pp = coef(nl); se = stderr(nl); tt = pp ./ se
-    CoefTable (DataFrame({pp, se, tt, ccdf(FDist(1, df_residual(nl)), tt .* tt)},
-                         ["Estimate","Std.Error","t value", "Pr(>|t|)"]),
-               pnames(nl), 4)
-end
-
-deviance(nl::NonlinearLS) = nl.rss
-
-df_residual(nl::NonlinearLS) = ((p,n) = size(nl);n-p)
-
-function gnfit(nl::NonlinearLS,verbose::Bool=false) # Gauss-Newton nonlinear least squares
-    if !nl.fit
-        m = nl.m; pars = nl.pars; incr = nl.incr; minf = nl.minfac; cvg = 2(tol = nl.tolsqr)
-        r = m.resid; tg = m.tgrad; ch = nl.ch; nl.rss = rss = updtmu!(m,pars); UL = ch.UL
-        for i in 1:nl.mxiter
-            ## Create the Cholesky factor of tg * tg' in place
-            _,info = LAPACK.potrf!('U',BLAS.syrk!('U','N',1.,tg,0.,UL))
-            info == 0 || error("Singular gradient matrix at pars = $(pars')")
-            ## solve in place for the Gauss-Newton increment - done in two stages
-            ## to be able to evaluate the orthogonality convergence criterion
-            cvg = sumsq(BLAS.trsv!('U','T','N',UL,BLAS.gemv!('N',1.,tg,r,0.,incr)))/rss
-            if verbose
-                print("Iteration:",lpad(string(i),3),", rss = "); showcompact(rss)
-                print(", cvg = "); showcompact(cvg); print(" at "); showcompact(pars)
-                println()
-            end
-            BLAS.trsv!('U','N','N',UL,incr)
-            if verbose
-                print("   Incr: ")
-                showcompact(incr)
-            end
-            f = 1.
-            while true
-                f >= minf || error("Failure to reduce rss at $(pars') with incr = $(incr') and minfac = $minf")
-                rss = updtmu!(nl.m, pars + f * incr)
-                if verbose
-                    print("  f = ",f,", rss = "); showcompact(rss); println()
-                end
-                rss < nl.rss && break
-                f *= 0.5                    # step-halving
-            end
-            cvg < tol && break
-            pars += f * incr
-            nl.rss = rss
+## update mu and resid from parameter matrix and indicators returning rss
+function updtmu!(m::PLregModF,pars::Matrix,inds::Vector)
+    nnl,nl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
+    length(inds) == n && size(pars,1) == npars(m) || error("DimensionMismatch")
+    mmd = mmjac(m)
+    mmf = mmfunc(m)
+    mu  = expctd(m)
+    r   = residuals(m)
+    tg  = tgrad(m)
+    x   = covariatemat(m)
+    y   = model_response(m)
+    nnl,nl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
+    ii  = 0
+    rss = zero(eltype(mu))
+    for i in 1:n
+        if ii != inds[i]
+            ii = inds[i]
+            nlp = view(pars,nlind,ii)
+            lp = view(pars,lind,ii)
         end
-        verbose && println()
-        copy!(nl.pars,pars)
-        cvg < tol || error("failure to converge in $(nl.mxiter) iterations")
-        nl.fit = true
+        mmdi = view(mmd,:,:,i)
+        mmf(nlp,view(x,:,i),view(tg,:,i),mmdi)
+        tg[nlind,i] = mmdi * lp
+        r[i] = y[i] - (mu[i] = dot(view(tg,lind,i),lp))
+        rss += abs2(r[i])
     end
-    nl
-end
-
-nobs(nl::NonlinearLS) = size(nl,2)
-
-pnames(nl::NonlinearLS) = pnames(nl.m)
-
-function show{T<:FP}(io::IO, nl::NonlinearLS{T})
-    gnfit(nl)
-    p,n = size(nl)
-    s2 = deviance(nl)/convert(T,n-p)
-    println(io, "Nonlinear least squares fit to ", n, " observations")
-## Add a model or modelformula specification in here
-    println(io); show(io, coeftable(nl)); println(io)
-    print(io,"Residual sum of squares at estimates: "); showcompact(io,nl.rss); println(io)
-    print(io,"Residual standard error = ");showcompact(io,sqrt(s2));
-    print(io, " on $(n-p) degrees of freedom")
-end
-    
-size(nl::NonlinearLS) = size(nl.m.tgrad)
-
-size(nl::NonlinearLS,args...) = size(nl.m.tgrad,args...)
-
-stderr(nl::NonlinearLS) = sqrt(diag(vcov(nl)))
-    
-function vcov{T<:FP}(nl::NonlinearLS{T})
-    p,n = size(nl)
-    deviance(nl)/convert(T,n-p) * symmetrize!(LAPACK.potri!('U', copy(nl.ch.UL)), 'U')
+    rss
 end
