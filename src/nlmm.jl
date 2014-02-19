@@ -9,9 +9,9 @@ df_residual(nm::NLMM) = nobs(nm) - npars(nm)
 ## returns the coefficient table
 function coeftable(nm::NLMM)
     pp = coef(nm); se = stderr(nm); tt = pp ./ se
-    CoefTable (DataFrame({pp, se, tt, ccdf(FDist(1, df_residual(nm)), abs2(tt))},
-                         ["Estimate","Std.Error","t value", "Pr(>|t|)"]),
-               pnames(nm), 4)
+    CoefTable(hcat(pp, se, tt, ccdf(FDist(1, df_residual(nm)), abs2(tt)))
+              ["Estimate","Std.Error","t value", "Pr(>|t|)"],
+              pnames(nm), 4)
 end
 
 theta(nm::NLMM) = theta(nm.lambda)

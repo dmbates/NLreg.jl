@@ -29,9 +29,9 @@ coef(nl::NonlinearLS) = copy(nl.pars)
 ## returns the coefficient table
 function coeftable(nl::NonlinearLS)
     pp = coef(nl); se = stderr(nl); tt = pp ./ se
-    CoefTable (DataFrame({pp, se, tt, ccdf(FDist(1, df_residual(nl)), tt .* tt)},
-                         ["Estimate","Std.Error","t value", "Pr(>|t|)"]),
-               pnames(nl), 4)
+    CoefTable(hcat(pp, se, tt, ccdf(FDist(1, df_residual(nl)), abs2(tt))),
+              ["Estimate","Std.Error","t value", "Pr(>|t|)"],
+              pnames(nl), 4)
 end
  
 deviance(nl::NonlinearLS) = nl.rss
@@ -183,9 +183,9 @@ coef(pl::PLinearLS) = copy(pl.pars)
 ## returns the coefficient table
 function coeftable(pl::PLinearLS)
     pp = coef(pl); se = stderr(pl); tt = pp ./ se
-    CoefTable (DataFrame({pp, se, tt, ccdf(FDist(1, df_residual(pl)), tt .* tt)},
-                         ["Estimate","Std.Error","t value", "Pr(>|t|)"]),
-               pnames(pl), 4)
+    CoefTable(hcat(pp, se, tt, ccdf(FDist(1, df_residual(pl)), abs2(tt))),
+              ["Estimate","Std.Error","t value", "Pr(>|t|)"],
+              pnames(pl), 4)
 end
 
 df_residual(pl::PLinearLS) = nobs(pl) - npars(pl)
