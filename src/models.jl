@@ -3,7 +3,7 @@ for (nm, mmf, nnl, nl) in ((:AsympReg, :AsympRegmmf, 1, 2),
                            (:AsympOrig, :AsympOrigmmf, 1, 1),
                            (:Biexp, :Biexpmmf, 2, 2),
                            (:Gompertz, :Gompertzmmf, 2, 1),
-                           (:LogBolusSD1, :LogBolusSD1mmf, 1, 1),
+                           (:BolusSD1, :BolusSD1mmf, 1, 1),
                            (:Logis3P, :Logis3Pmmf, 2, 1),
                            (:Logis4P, :Logis4Pmmf, 2, 2),
                            (:Chwirut, :Chwirutmmf, 2, 1),
@@ -96,17 +96,18 @@ function initpars(m::AsympOff)
 end
 
 ### Bolus single dose in measured compartment using logK
-function LogBolusSD1mmf(nlp,x,tg,MMD)
-    nKx1 = -exp(nlp[1]) * x[1] 
-    MMD[1,1] = nKx1 * (tg[1] = exp(nKx1))
+function BolusSD1mmf(nlp,x,tg,MMD)
+    x1 = x[1]
+    nKx1 = -nlp[1] * x1            # negative K*x[1] where nlp[1] is K
+    MMD[1,1] = -x1 * (tg[1] = exp(nKx1))
 end
 
-pnames(m::LogBolusSD1) = ["V","lK"]
+pnames(m::BolusSD1) = ["V","K"]
 
-function initpars{T<:FP}(m::LogBolusSD1{T})
+function initpars{T<:FP}(m::BolusSD1{T})
     (n = length(m.y)) < 2 && return [-one(T)]
     cc = linreg(vec(m.x[1,:]),log(m.y))
-    [cc[2] < 0. ? log(-cc[2]) : -one(T)]
+    [cc[2] < 0. ? -cc[2] : -one(T)]
 end
 
 ### 3-parameter Logistic 
