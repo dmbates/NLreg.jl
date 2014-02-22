@@ -2,11 +2,11 @@ for (nm, mmf, nnl, nl) in ((:AsympReg, :AsympRegmmf, 1, 2),
                            (:AsympOff, :AsympOffmmf, 2, 1),
                            (:AsympOrig, :AsympOrigmmf, 1, 1),
                            (:Biexp, :Biexpmmf, 2, 2),
-                           (:Gompertz, :Gompertzmmf, 2, 1),
                            (:BolusSD1, :BolusSD1mmf, 1, 1),
+                           (:Chwirut, :Chwirutmmf, 2, 1),
+                           (:Gompertz, :Gompertzmmf, 2, 1),
                            (:Logis3P, :Logis3Pmmf, 2, 1),
                            (:Logis4P, :Logis4Pmmf, 2, 2),
-                           (:Chwirut, :Chwirutmmf, 2, 1),
                            (:MicMen, :MicMenmmf, 1, 1))
     @eval begin
         immutable $nm{T<:FP} <: PLregModF{T}

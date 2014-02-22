@@ -40,7 +40,7 @@ end
 
 function (*)(vv::Vector{DataType},plm::NLregModF)
     dt = Dtrans(vv)
-    length(dt) == size(plm,2) || error("DimensionMisMatch")
+    length(dt) == size(plm,1) || error("DimensionMisMatch")
     CompositePLModF(dt,plm)
 end
 

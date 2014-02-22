@@ -29,11 +29,15 @@ function pnames(d::Dtrans, innms::Vector)
     (p = length(d)) == length(innms) || error("DimensionMismatch")
     [pnames(d[i],innms[i]) for i in 1:p]
 end
-    
-type ExpTr <: Strans end                # exponential transformation
-parjac(::Type{ExpTr}, x) = (ex = exp(x); (ex, ex))
-pnames(::Type{ExpTr}, nm) = "log(" * nm * ")"
-invtrans(::Type{ExpTr}, x) = log(x)
+
+## The scalar transformations are named according to the mapping from the
+## model's parameters to the composite model's parameters, called invtrans here.
+## This is in the grand tradition of GLMs where the important transformation is called
+## the "inverse link".
+type LogTr <: Strans end                # logarithmic transformation
+parjac(::Type{LogTr}, x) = (ex = exp(x); (ex, ex))
+pnames(::Type{LogTr}, nm) = "log(" * nm * ")"
+invtrans(::Type{LogTr}, x) = log(x)
 
 type IdTr <: Strans end                 # identity transformation
 parjac(::Type{IdTr}, x) = (x,one(x))

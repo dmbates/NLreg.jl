@@ -16,9 +16,9 @@ module NLreg
         AsympOrig,    # Asymptotic regression through origin
         AsympReg,     # Asymptotic regression model
         Biexp,        # Bi-exponential model
+        BolusSD1,     # 1-compartment, single bolus dose model
         Chwirut,      # Model used in the NIST nonlinear regression examples
         Gompertz,     # Gompertz growth model
-        LogBolusSD1,  # 1-compartment, single bolus dose model
         Logis3P,      # 3-parameter logistic
         Logis4P,      # 4-parameter logistic
         MicMen,       # Michaelis-Menten model
@@ -33,8 +33,8 @@ module NLreg
         SimpleNLMM,      # Simple population nonlinear mixed-effects model
               # parameter transformations
         Dtrans,          # diagonal parameter transformation
-        ExpTr,           # scalar exponential transformation
         IdTr,            # scalar identity transformation
+        LogTr,           # scalar logarithmic transformation
         Ptrans,          # abstract parameter transformation
         Strans,          # scalar parameter transformation
               # Full, nonlinear regression models
