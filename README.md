@@ -16,20 +16,19 @@ The external constructors for this model allow it to be specified from `t` and `
 A nonlinear regression model must provide methods for `pnames`, the parameter names, `updtmu`, update the mean response, residuals and `tgrad` from new parameter values, and `initpars`, determine initial parameter estimates from the data.
 
 ```jl
-julia> using DataFrames, NLreg, StatsBase
+julia> using DataFrames, NLreg
 
-julia> const sd1 = within(readtable(Pkg.dir("NLreg","data","sd1.csv.gz")),:(ID = pool(ID)));
+julia> const sd1 = readtable(Pkg.dir("NLreg","data","sd1.csv.gz"));
 
-julia> nl = NonlinearLS(logsd1(:(CONC ~ TIME), sd1))
-Model fit by nonlinear least squares to 580 observations
+julia> nl = fit(BolusSD1(CONC ~ TIME, sd1))
+Nonlinear least squares fit to 580 observations
 
-2x4 DataFrame:
-        parameter estimate    stderr  t_value
-[1,]       "logV" 0.133559 0.0433655  3.07985
-[2,]       "logK" -1.40385 0.0823891 -17.0392
+     Estimate Std.Error t value Pr(>|t|)
+V     1.14296 0.0495656 23.0595  < eps()
+K    0.245688 0.0202414 12.1379  < eps()
 
-Residual sum of squares at estimates = 110.59728690764713
-Residual standard error = 0.43742975097431563 on 578 degrees of freedom
+Residual sum of squares at estimates: 110.597
+Residual standard error = 0.43743 on 578 degrees of freedom
 ```
 
 ## Plans for the near future
@@ -65,6 +64,47 @@ To fit such a model we create a `MicMen` object from the vector of
 observed concentrations and a `PLregFit` object from this model and
 the responses.
 ```julia
+julia> pur = dataset("datasets","Puromycin");
+
+julia> purtrt = sub(pur, pur[:State] .== "treated")
+12x3 SubDataFrame{Array{Int64,1}}
+|-------|------|------|-----------|
+| Row # | Conc | Rate | State     |
+| 1     | 0.02 | 76   | "treated" |
+| 2     | 0.02 | 47   | "treated" |
+| 3     | 0.06 | 97   | "treated" |
+| 4     | 0.06 | 107  | "treated" |
+| 5     | 0.11 | 123  | "treated" |
+| 6     | 0.11 | 139  | "treated" |
+| 7     | 0.22 | 159  | "treated" |
+| 8     | 0.22 | 152  | "treated" |
+| 9     | 0.56 | 191  | "treated" |
+| 10    | 0.56 | 201  | "treated" |
+| 11    | 1.1  | 207  | "treated" |
+| 12    | 1.1  | 200  | "treated" |
+
+julia> pm1 = fit(MicMen(Rate ~ Conc, purtrt), true)
+Iteration:  1, rss = 1679.58, cvg = 0.257787 at [201.837,0.0484065]
+   Incr: [0.012547]  f = 1.0, rss = 1211.92
+Iteration:  2, rss = 1211.92, cvg = 0.0122645 at [210.623,0.0609536]
+   Incr: [0.00280048]  f = 1.0, rss = 1195.66
+Iteration:  3, rss = 1195.66, cvg = 0.000161307 at [212.448,0.063754]
+   Incr: [0.000331041]  f = 1.0, rss = 1195.45
+Iteration:  4, rss = 1195.45, cvg = 1.56158e-6 at [212.661,0.0640851]
+   Incr: [3.27084e-5]  f = 1.0, rss = 1195.45
+Iteration:  5, rss = 1195.45, cvg = 1.4557e-8 at [212.681,0.0641178]
+   Incr: [3.15934e-6]  f = 1.0, rss = 1195.45
+Iteration:  6, rss = 1195.45, cvg = 1.35192e-10 at [212.684,0.0641209]
+   Incr: [3.04477e-7]  f = 1.0, rss = 1195.45
+
+Nonlinear least squares fit to 12 observations
+
+      Estimate  Std.Error t value Pr(>|t|)
+Vm     212.684    6.94715 30.6145  3.2e-11
+K    0.0641212 0.00828095 7.74323   1.6e-5
+
+Residual sum of squares at estimates: 1195.45
+Residual standard error = 10.9337 on 10 degrees of freedom
 julia> using RDatasets, NLreg
 
 julia> purtrt = sub(dataset("datasets","Puromycin"),:(State .== "treated"));
@@ -91,6 +131,30 @@ Residual sum of squares at estimates: 0.173116
 Residual standard error = 0.131574 on 10 degrees of freedom
 ```
 
+We can also use parameter transformations
+
+```julia
+julia> pm2 = fit([LogTr] * MicMen(Rate ~ Conc, purtrt), true)
+Iteration:  1, rss = 1679.58, cvg = 0.257787 at [201.837,-3.02812]
+   Incr: [0.259201]  f = 1.0, rss = 1198.55
+Iteration:  2, rss = 1198.55, cvg = 0.00234006 at [211.785,-2.76892]
+   Incr: [0.0198568]  f = 1.0, rss = 1195.48
+Iteration:  3, rss = 1195.48, cvg = 2.12492e-5 at [212.598,-2.74906]
+   Incr: [0.00188326]  f = 1.0, rss = 1195.45
+Iteration:  4, rss = 1195.45, cvg = 1.96812e-7 at [212.675,-2.74718]
+   Incr: [0.000181183]  f = 1.0, rss = 1195.45
+Iteration:  5, rss = 1195.45, cvg = 1.82666e-9 at [212.683,-2.747]
+   Incr: [1.74545e-5]  f = 1.0, rss = 1195.45
+
+Nonlinear least squares fit to 12 observations
+
+        Estimate Std.Error  t value Pr(>|t|)
+Vm       212.684   6.94715  30.6145  3.2e-11
+log(K)  -2.74698  0.129145 -21.2705   1.2e-9
+
+Residual sum of squares at estimates: 1195.45
+Residual standard error = 10.9337 on 10 degrees of freedom
+```
 ## Creating a PLregMod type
 
 A `PLregMod` type contains the transposed gradient, usually called
