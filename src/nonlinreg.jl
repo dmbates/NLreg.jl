@@ -82,7 +82,7 @@ function updtmu!(m::PLregModF,pars::Vector)
     tg  = tgrad(m)
     x   = covariatemat(m)
     y   = model_response(m)
-    nnl,nl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
+    nnl,nl,n = size(m.MMD); lind = 1:nl; nlind = nl + (1:nnl)
     nlpars = view(pars,nlind); lpars = view(pars,lind)
     rss = zero(eltype(mu))
     for i in 1:n

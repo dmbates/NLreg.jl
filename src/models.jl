@@ -36,13 +36,17 @@ for (nm, mmf, nnl, nl) in ((:AsympReg, :AsympRegmmf, 1, 2),
 end
     
 ### Michaelis-Menten model for enzyme kinetics
-function MicMenmmf(nlp,x,tg,MMD)
-    x1 = x[1]
-    denom = nlp[1] + x1
-    MMD[1,1] = -(tg[1] =  x1/denom)/denom
-end
+formula(::MicMen) = :(Vm*x/(K+x))
+pnames(::MicMen) = [:Vm, :K, :x]
+size(::MicMen) = (1,1,1)
 
-pnames(m::MicMen) = ["Vm", "K"]
+function MicMenmmf(nlp,x,tg,MMD)
+    @inbounds begin
+        x1 = x[1]
+        invde = inv(nlp[1] + x1)
+        MMD[1,1] = -(tg[1] =  x1*invde)*invde
+    end
+end
 
 function initpars(m::MicMen)
     x = vec(m.x); y = m.y
@@ -52,13 +56,15 @@ function initpars(m::MicMen)
 end
 
 ### Asymptotic Regression model
+formula(::AsympReg) = :(Asym + (Asym - R0)*exp(-rc*x))
+pnames(::AsympReg) = [:Asym,:R0,:rc,:x]
+size(::AsympReg) = (2,1,1) # conditionally linear, nonlinear, covariates
+
 function AsympRegmmf(nlp,x,tg,MMD)
     x1 = x[1]
     tg[1] = 1 - (tg[2] = eKx = exp(-nlp[1]*x1))
     MMD[2,1] = -(MMD[1,1] = x1 * eKx)
 end
-
-pnames(m::AsympReg) = ["Asym","R0","rc"]
 
 function initpars(m::AsympReg)
     y = m.y
@@ -66,13 +72,15 @@ function initpars(m::AsympReg)
 end
 
 ### Asymptotic Regression model constrained to pass through the origin
+formula(::AsympOrig) = :(Asym*(1 - exp(-rc*x)))
+pnames(::AsympOrig) = [:Asym,:rc,:x]
+size(::AsympOrig) = (1,1,1)
+
 function AsympOrigmmf(nlp,x,tg,MMD)
     x1 = x[1] 
     tg[1] =  1 - (ex = exp(-nlp[1]*x1))
     MMD[1,1] = x1*ex
 end
-
-pnames(m::AsympOrig) = ["V","ke"]
 
 function initpars(m::AsympOrig)
     y = m.y
@@ -81,13 +89,15 @@ function initpars(m::AsympOrig)
 end
 
 ### Asymptotic Regression model expressed with an offset in x
+formula(::AsympOff) = :(Asym*(1-exp(-rc*(x-c0))))
+pnames(::AsympOff) = [:Asym,:c0,:rc,:x]
+size(::AsympOff) = (1,2,1)
+
 function AsympOffmmf(nlp,x,tg,MMD)
     tg[1] = 1 - (eKx = exp(-(K = nlp[2])*(x1 = x[1] - nlp[1])))
     MMD[1,1] = -K * eKx
     MMD[2,1] = x1 * eKx
 end
-
-pnames(m::AsympOff) = ["Asym","c0","rc"]
 
 function initpars(m::AsympOff)
     cc = coef(fit(AsympReg(vec(m.x),m.y))) # fit the model with AsympReg pars
@@ -95,14 +105,16 @@ function initpars(m::AsympOff)
     [-log(A/(A-cc[2]))/rc, rc]
 end
 
-### Bolus single dose in measured compartment using logK
+### Bolus single dose in measured compartment
+formula(::BolusSD1) = :(V*exp(-K*x))
+pnames(::BolusSD1) = [:V,:K,:x]
+size(::BolusSD1) = (1,1,1)
+
 function BolusSD1mmf(nlp,x,tg,MMD)
     x1 = x[1]
     nKx1 = -nlp[1] * x1            # negative K*x[1] where nlp[1] is K
     MMD[1,1] = -x1 * (tg[1] = exp(nKx1))
 end
-
-pnames(m::BolusSD1) = ["V","K"]
 
 function initpars{T<:FP}(m::BolusSD1{T})
     (n = length(m.y)) < 2 && return [-one(T)]
@@ -110,7 +122,11 @@ function initpars{T<:FP}(m::BolusSD1{T})
     [cc[2] < 0. ? -cc[2] : -one(T)]
 end
 
-### 3-parameter Logistic 
+### 3-parameter Logistic
+formula(::Logis3P) = :(Asym/(1 + exp(-(x-xmid)/scal)))
+pnames(::Logis3P) = [:Asym,:xmid,:scal,:x]
+size(::Logis3P) = (1,2,1)
+
 function Logis3Pmmf(nlp,x,tg,MMD)
     scal = nlp[2]
     nd = nlp[1] - x[1]                # negative difference from xmid
@@ -119,8 +135,6 @@ function Logis3Pmmf(nlp,x,tg,MMD)
     tg[1] = 1/oped
     MMD[2,1] = -nd*(MMD[1,1] = -(ed/scal)/abs2(oped))/scal
 end
-
-pnames(m::Logis3P) = ["Asym","xmid","scal"]
 
 function initpars(m::Logis3P)
     z = copy(m.y)
@@ -132,6 +146,10 @@ function initpars(m::Logis3P)
 end
 
 ### 4-parameter Logistic 
+formula(::Logis4P) = :(A + (B-A)/(1 + exp(-(x-xmid)/scal)))
+pnames(::Logis4P) = [:A,:B,:xmid,:scal,:x]                  
+size(::Logis3P) = (2,2,1)
+
 function Logis4Pmmf(nlp,x,tg,MMD)
     scal = nlp[2]
     nd = nlp[1] - x[1]                # negative difference from xmid
@@ -142,8 +160,6 @@ function Logis4Pmmf(nlp,x,tg,MMD)
     MMD[2,1] = -(MMD[2,2] = nd * bb/scal)
 end
 
-pnames(m::Logis4P) = ["A","B","xmid","scal"]
-
 function initpars(m::Logis4P)
     y = m.y
     x = vec(m.x)
@@ -152,7 +168,10 @@ function initpars(m::Logis4P)
     linreg(log(z ./ (1 - z)),x)
 end
 
-### Biexponential 
+### Biexponential
+formula(::Biexp) = :(A1 * exp(-K1*x) + A2 * exp(-K2*x))
+pnames(::Biexp) = [:A1,:A2,:K1,:K2,:x]
+size(::Biexp) = (2,2,1)
 function Biexpmmf(nlp,x,tg,MMD)
     x1 = x[1]
     tg[1] = eK1 = exp(-nlp[1]*x1)
@@ -160,8 +179,6 @@ function Biexpmmf(nlp,x,tg,MMD)
     MMD[1,1] = -x1 * eK1
     MMD[2,2] = -x1 * eK2
 end
-
-pnames(m::Biexp) = ["A1","A2","K1","K2"]
 
 function initpars(m::Biexp)
     x = copy(vec(m.x))
@@ -178,6 +195,9 @@ end
 
 ### Gompertz
 
+formula(::Gompertz) = :(Asym*exp(-b2*b3^x))
+pnames(::Gompertz) = [:Asym,:a,:b,:x]
+size(::Gompertz) = (1,2,1)
 function Gompertzmmf(nlp,x,tg,MMD)
     x1 = x[1]
     a = nlp[1]
@@ -188,8 +208,9 @@ function Gompertzmmf(nlp,x,tg,MMD)
     MMD[2,1] = -e1 * a * b^(x1 - 1) * x1
 end
 
-pnames(m::Gompertz) = ["Asym","a","b"]
-
+formula(::Chwirut) = :(R0*exp(-rc*x)/1+m*x)
+pnames(::Chwirut) = [:R0,:rc,:m,:x]
+size(::Gompertz) = (1,2,1)
 function Chwirutmmf(nlp,x,tg,MMD)
     x1 = x[1]
     et = exp(-nlp[1]*x1)
@@ -199,7 +220,6 @@ function Chwirutmmf(nlp,x,tg,MMD)
     MMD[2,1] = (MMD[1,1] = -etx/denom)/denom
 end
 
-pnames(m::Chwirut) = ["R0","rc","m"]
 
 initpars(m::Chwirut) = [-(linreg(vec(m.x),log(m.y))[2]), mean(m.x)]
 
@@ -235,4 +255,4 @@ function initpars{T<:FP}(m::Logsd1{T})
     [cc[2] < 0. ? [cc[1],log(-cc[2])] : [cc[1],-one(T)]]
 end
 
-pnames(m::Logsd1) = ["logV","logK"]
+pnames(m::Logsd1) = [:logV,:logK,:x]

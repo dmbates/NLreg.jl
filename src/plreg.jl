@@ -31,7 +31,7 @@ function coeftable(nl::NonlinearLS)
     pp = coef(nl); se = stderr(nl); tt = pp ./ se
     CoefTable(hcat(pp, se, tt, ccdf(FDist(1, df_residual(nl)), abs2(tt))),
               ["Estimate","Std.Error","t value", "Pr(>|t|)"],
-              pnames(nl), 4)
+              map(string,pnames(nl)[1:length(pp)]), 4)
 end
  
 deviance(nl::NonlinearLS) = nl.rss
@@ -109,7 +109,7 @@ type PLinearLS{T<:FP} <: RegressionModel
     fit::Bool
 end
 function PLinearLS{T<:FP}(m::PLregModF{T},nlpars::Vector{T})
-    nnl,nl,n = size(m); length(nlpars) == nnl || error("Dimension mismatch")
+    nnl,nl,n = size(m.MMD); length(nlpars) == nnl || error("Dimension mismatch")
     qr = qrfact!(updtMM!(m,nlpars)')
     pars = [vec(qr\model_response(m)),nlpars]
     PLinearLS(m, qr, pars, zeros(T,nnl), Array(T,n,nnl), updtmu!(m,pars),
@@ -120,7 +120,7 @@ PLinearLS(m::PLregModF) = PLinearLS(m,initpars(m))
 pnames(pl::PLinearLS) = pnames(pl.m)
 
 function deviance{T<:FP}(pl::PLinearLS{T},nlp::Vector{T})
-    m = pl.m; nnl,nl,n = size(m); pars = pl.pars
+    m = pl.m; nnl,nl,n = size(m.MMD); pars = pl.pars
     copy!(view(pars,nl + (1:nnl)), nlp)   # record nl pars
     pl.qr = qr = qrfact!(updtMM!(m,nlp)') # update and decompose lin pars model matrix
     copy!(view(pars,1:nl),qr\model_response(m))     # conditionally optimal linear pars
@@ -129,7 +129,7 @@ end
 deviance(pl::PLinearLS) = pl.rss
 
 function gpinc{T<:FP}(pl::PLinearLS{T})
-    m = pl.m; nnl,nl,n = size(m); Aphi = mmjac(m); B = pl.B
+    m = pl.m; nnl,nl,n = size(m.MMD); Aphi = mmjac(m); B = pl.B
     r = residuals(m); mqr = pl.qr
     lin = 1:nl; lpars = pl.pars[lin]
     for k in 1:nnl
@@ -148,7 +148,7 @@ end
 
 function gpfit(pl::PLinearLS,verbose::Bool=false) # Golub-Pereyra variable projection algorithm
     if !pl.fit
-        m = pl.m; pars = pl.pars; nnl,nl,n = size(m); nlin = nl + (1:nnl);
+        m = pl.m; pars = pl.pars; nnl,nl,n = size(m.MMD); nlin = nl + (1:nnl);
         minf = pl.minfac; cvg = 2(tol = pl.tolsqr); oldrss = pl.rss
         for i in 1:pl.mxiter
             cvg = gpinc(pl) # evaluate the increment and convergence criterion
@@ -185,7 +185,7 @@ function coeftable(pl::PLinearLS)
     pp = coef(pl); se = stderr(pl); tt = pp ./ se
     CoefTable(hcat(pp, se, tt, ccdf(FDist(1, df_residual(pl)), abs2(tt))),
               ["Estimate","Std.Error","t value", "Pr(>|t|)"],
-              pnames(pl), 4)
+              map(string,pnames(pl)[1:length(pp)]), 4)
 end
 
 df_residual(pl::PLinearLS) = nobs(pl) - npars(pl)
@@ -213,9 +213,9 @@ function show{T<:FP}(io::IO, pl::PLinearLS{T})
     print(io, " on $(df_residual(pl)) degrees of freedom")
 end
 
-size(pl::PLinearLS) = size(pl.m)
+size(pl::PLinearLS) = size(pl.m.MMD)
 
-size(pl::PLinearLS,args...) = size(pl.m,args...)
+size(pl::PLinearLS,args...) = size(pl.m.MMD,args...)
 
 vcov(pl::PLinearLS) = scale(pl,true) * unscaledvcov(pl.m)
 
