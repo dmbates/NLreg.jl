@@ -1,16 +1,8 @@
 module NLreg
 
-    using DataArrays, DataFrames, NumericExtensions, NLopt, Base.Grisu
-    using Base.LinAlg.CHOLMOD: CholmodSparse!, CholmodSparse, CholmodFactor
-    using StatsBase: CoefTable, StatisticalModel, RegressionModel, range
+    using DataArrays, StatsBase, DataFrames
     using Distributions: FDist, ccdf
     using Base.LinAlg.QRCompactWY
-
-    import DataFrames: model_response
-    import Distributions: fit
-    import GLM: formula                 # move this to StatsBase?
-    import StatsBase: coef, coeftable, confint, deviance, loglikelihood, nobs,
-               stderr, vcov, predict, residuals, rle
 
     export     # Partially linear models
         AsympOff,     # Asymptotic regression expressed as an offset
@@ -41,7 +33,7 @@ module NLreg
               # Full, nonlinear regression models
         Logsd1,       # 1-compartment, single bolus dose model with logged parameters
 
-        fit,          # fit the model
+        formula,      # define the nonlinear model formula
         incr!,        # increment the spherical random effects
         initpars,     # create initial values for the parameters
         lowerbd,      # lower bounds on NLMM parameters
@@ -61,8 +53,8 @@ module NLreg
     include("nonlinreg.jl")
     include("plreg.jl")
     include("models.jl")
-    include("nlmm.jl")
-    include("simplenlmm.jl")
+#    include("nlmm.jl")
+#    include("simplenlmm.jl")
     include("ptrans.jl")
     include("compositemodel.jl")
 
