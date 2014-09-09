@@ -11,12 +11,12 @@ type Dtrans <: Ptrans                   # diagonal (i.e. vector of scalars)
     end
 end
 
-getindex(d::Dtrans,i) = d.vv[i]
+Base.getindex(d::Dtrans,i) = d.vv[i]
 
-length(d::Dtrans) = length(d.vv)
+Base.length(d::Dtrans) = length(d.vv)
 
 function parjac(d::Dtrans, inpar::Vector)
-    (p = length(d)) == length(inpar) || error("DimensionMismatch")
+    (p = length(d)) == length(inpar) || throw(DimensionMismatch(""))
     outpar = similar(inpar)
     jdiag = similar(inpar)
     for i in 1:p
@@ -26,7 +26,7 @@ function parjac(d::Dtrans, inpar::Vector)
 end
 
 function pnames(d::Dtrans, innms::Vector)
-    (p = length(d)) == length(innms) || error("DimensionMismatch")
+    (p = length(d)) == length(innms) || throw(DimensionMismatch(""))
     [pnames(d[i],innms[i]) for i in 1:p]
 end
 

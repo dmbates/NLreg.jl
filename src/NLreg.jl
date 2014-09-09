@@ -6,10 +6,11 @@ module NLreg
     using Distributions: FDist, ccdf
     using Base.LinAlg.QRCompactWY
 
-    import GLM: formula                 # move this to StatsBase?
+    import DataFrames: model_response
     import Distributions: fit
+    import GLM: formula                 # move this to StatsBase?
     import StatsBase: coef, coeftable, confint, deviance, loglikelihood, nobs,
-               stderr, vcov, model_response, predict, residuals, rle
+               stderr, vcov, predict, residuals, rle
 
     export     # Partially linear models
         AsympOff,     # Asymptotic regression expressed as an offset

@@ -1,21 +1,21 @@
 abstract NLregModF{T<:FP}
 
 ## default methods for all NLregModF objects
-covariatemat(m::NLregModF)   = m.x
-expctd(m::NLregModF)         = m.mu
-model_response(m::NLregModF) = m.y
-nobs(m::NLregModF)           = length(model_response(m))
-npars(m::NLregModF)          = size(tgrad(m),1)
-mufunc(m::NLregModF)         = m.f
-residuals(m::NLregModF)      = m.resid
-size(m::NLregModF)           = size(tgrad(m))
-size(m::NLregModF,args...)   = size(tgrad(m),args...)
-tgrad(m::NLregModF)          = m.tgrad # transposed gradient matrix
-unscaledvcov(m::NLregModF)   = inv(cholfact(tgrad(m) * tgrad(m)'))
+covariatemat(m::NLregModF)      = m.x
+expctd(m::NLregModF)            = m.mu
+model_response(m::NLregModF)    = m.y
+nobs(m::NLregModF)              = length(model_response(m))
+npars(m::NLregModF)             = size(tgrad(m),1)
+mufunc(m::NLregModF)            = m.f
+residuals(m::NLregModF)         = m.resid
+Base.size(m::NLregModF)         = size(tgrad(m))
+Base.size(m::NLregModF,args...) = size(tgrad(m),args...)
+tgrad(m::NLregModF)             = m.tgrad # transposed gradient matrix
+unscaledvcov(m::NLregModF)      = inv(cholfact(tgrad(m) * tgrad(m)'))
 
 ## update the expected response and residuals, returning the sum of squared residuals
 function updtmu!(m::NLregModF, pars::Vector)
-    length(pars) == npars(m) || error("DimensionMismatch")
+    length(pars) == npars(m) || throw(DimensionMismatch(""))
     f  = mufunc(m)
     mu = expctd(mu)
     r  = residuals(m)
@@ -31,7 +31,7 @@ function updtmu!(m::NLregModF, pars::Vector)
 end
 
 function updtmu!(m::NLregModF, pars::Matrix, inds::Vector)
-    (n == nobs(m)) == length(inds) && size(pars,1) == npars(m) || error("DimensionMismatch")
+    (n == nobs(m)) == length(inds) && size(pars,1) == npars(m) || throw(DimensionMismatch(""))
     f  = mufunc(m)
     mu = expctd(mu)
     r  = residuals(m)
@@ -54,10 +54,10 @@ end
 abstract PLregModF{T<:FP} <: NLregModF{T}
 
 ## default methods for all PLregModF objects
-mmjac(m::PLregModF)        = m.MMD       # model-matrix derivative (Jacobian)
-mmfunc(m::PLregModF)       = m.mmf       # model-matrix update function
-size(m::PLregModF)         = size(mmjac(m))
-size(m::PLregModF,args...) = size(mmjac(m),args...)
+mmjac(m::PLregModF)             = m.MMD # model-matrix derivative (Jacobian)
+mmfunc(m::PLregModF)            = m.mmf # model-matrix update function
+Base.size(m::PLregModF)         = size(mmjac(m))
+Base.size(m::PLregModF,args...) = size(mmjac(m),args...)
 
 ## update the (transposed) model matrix for the linear parameters and the gradient MMD
 function updtMM!(m::PLregModF,nlpars)
@@ -74,7 +74,7 @@ end
 
 ## update mu and resid from full parameter vector returning rss
 function updtmu!(m::PLregModF,pars::Vector)
-    length(pars) == npars(m) || error("DimensionMismatch")
+    length(pars) == npars(m) || throw(DimensionMismatch(""))
     mmd = mmjac(m)
     mmf = mmfunc(m)
     mu  = expctd(m)
@@ -98,7 +98,7 @@ end
 ## update mu and resid from parameter matrix and indicators returning rss
 function updtmu!(m::PLregModF,pars::Matrix,inds::Vector)
     nnl,nl,n = size(m); lind = 1:nl; nlind = nl + (1:nnl)
-    length(inds) == n && size(pars,1) == npars(m) || error("DimensionMismatch")
+    length(inds) == n && size(pars,1) == npars(m) || throw(DimensionMismatch(""))
     mmd = mmjac(m)
     mmf = mmfunc(m)
     mu  = expctd(m)

@@ -20,7 +20,7 @@ pnames(cm::CompositeModF) = pnames(ptran(cm), pnames(nlmod(cm)))
 residuals(cm::CompositeModF) = residuals(cm.nm)
 
 function updtmu!(cm::CompositeModF,pars::Vector)
-    length(pars) == npars(cm) || error("DimensionMismatch")
+    length(pars) == npars(cm) || throw(DimensionMismatch(""))
     nm = nlmod(cm)
     tpars, jac = parjac(ptran(cm), pars)
     res = updtmu!(nm,tpars)
@@ -73,16 +73,16 @@ ptran(cp::CompositePLModF) = cp.pt
 
 residuals(cp::CompositePLModF) = residuals(cp.plm)
 
-size(cp::CompositePLModF) = size(plmod(cp))
+Base.size(cp::CompositePLModF) = size(plmod(cp))
 
-size(cp::CompositePLModF,args...) = size(plmod(cp),args...)
+Base.size(cp::CompositePLModF,args...) = size(plmod(cp),args...)
 
 tgrad(cp::CompositePLModF) = tgrad(cp.plm)
 
 function updtMM!(cp::CompositePLModF,nlpars::Vector)
     plm = plmod(cp)
     nnl,nl,n = size(plm)
-    length(nlpars) == nnl || error("DimensionMismatch")
+    length(nlpars) == nnl || throw(DimensionMismatch(""))
     tpars, jac = parjac(ptran(cp), nlpars)
     res = updtMM!(plm,tpars)
     if isa(jac,Diagonal)                # can update mmjac in place

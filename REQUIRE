@@ -1,6 +1,7 @@
 julia 0.3-
 DataFrames 0.3.6-
-NumericExtensions 0.3.5-
 Distributions 0.2.13-
-StatsBase 0.2.9-
+GLM
 NLopt
+NumericExtensions 0.3.5-
+StatsBase 0.2.9-

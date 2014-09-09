@@ -93,8 +93,8 @@ function show{T<:FP}(io::IO, nl::NonlinearLS{T})
     print(io,"Residual standard error = ");showcompact(io,sqrt(s2));
     print(io, " on $(n-p) degrees of freedom")
 end
-size(nl::NonlinearLS) = size(tgrad(model(nl)))
-size(nl::NonlinearLS,args...) = size(tgrad(model(nl)),args...)
+Base.size(nl::NonlinearLS) = size(tgrad(model(nl)))
+Base.size(nl::NonlinearLS,args...) = size(tgrad(model(nl)),args...)
 
 type PLinearLS{T<:FP} <: RegressionModel
     m::PLregModF{T}
@@ -110,7 +110,7 @@ type PLinearLS{T<:FP} <: RegressionModel
 end
 function PLinearLS{T<:FP}(m::PLregModF{T},nlpars::Vector{T})
     nnl,nl,n = size(m)
-    length(nlpars) == nnl || throw DimensionMismatch("")
+    length(nlpars) == nnl || throw(DimensionMismatch(""))
     qr = qrfact!(updtMM!(m,nlpars)')
     pars = [vec(qr\model_response(m)),nlpars]
     PLinearLS(m, qr, pars, zeros(T,nnl), Array(T,n,nnl), updtmu!(m,pars),
@@ -214,9 +214,9 @@ function show{T<:FP}(io::IO, pl::PLinearLS{T})
     print(io, " on $(df_residual(pl)) degrees of freedom")
 end
 
-size(pl::PLinearLS) = size(pl.m.MMD)
+Base.size(pl::PLinearLS) = size(pl.m.MMD)
 
-size(pl::PLinearLS,args...) = size(pl.m.MMD,args...)
+Base.size(pl::PLinearLS,args...) = size(pl.m.MMD,args...)
 
 vcov(pl::PLinearLS) = scale(pl,true) * unscaledvcov(pl.m)
 
