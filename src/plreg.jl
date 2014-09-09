@@ -4,7 +4,7 @@ type NonlinearLS{T<:FP} <: RegressionModel # nonlinear least squares fits
     m::NLregModF{T}
     pars::Vector{T}
     incr::Vector{T}
-    ch::Cholesky{T}
+    ch::Base.Cholesky{T}
     rss::T      # residual sum of squares at last successful iteration
     tolsqr::T   # squared tolerance for orthogonality criterion
     minfac::T
@@ -109,7 +109,8 @@ type PLinearLS{T<:FP} <: RegressionModel
     fit::Bool
 end
 function PLinearLS{T<:FP}(m::PLregModF{T},nlpars::Vector{T})
-    nnl,nl,n = size(m.MMD); length(nlpars) == nnl || error("Dimension mismatch")
+    nnl,nl,n = size(m)
+    length(nlpars) == nnl || throw DimensionMismatch("")
     qr = qrfact!(updtMM!(m,nlpars)')
     pars = [vec(qr\model_response(m)),nlpars]
     PLinearLS(m, qr, pars, zeros(T,nnl), Array(T,n,nnl), updtmu!(m,pars),
@@ -129,7 +130,7 @@ end
 deviance(pl::PLinearLS) = pl.rss
 
 function gpinc{T<:FP}(pl::PLinearLS{T})
-    m = pl.m; nnl,nl,n = size(m.MMD); Aphi = mmjac(m); B = pl.B
+    m = pl.m; nnl,nl,n = size(m); Aphi = mmjac(m); B = pl.B
     r = residuals(m); mqr = pl.qr
     lin = 1:nl; lpars = pl.pars[lin]
     for k in 1:nnl

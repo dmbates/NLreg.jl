@@ -19,7 +19,7 @@ for (nm, mmf, nnl, nl) in ((:AsympReg, :AsympRegmmf, 1, 2),
             mmf::Function
         end
         function $nm{T<:FP}(x::Vector{T},y::Vector{T})
-            n = length(x); length(y) == n || error("Dimension mismatch")
+            (n = length(x)) == length(y)|| throw DimensionMismatch("")
             $nm(reshape(x,(1,n)),y,similar(y),similar(y),ones(T,($(nl + nnl),n)),
                 zeros(T,($nnl,$nl,n)),$mmf)
         end

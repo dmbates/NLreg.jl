@@ -6,7 +6,6 @@ module NLreg
     using Distributions: FDist, ccdf
     using Base.LinAlg.QRCompactWY
 
-    importall Base
     import GLM: formula                 # move this to StatsBase?
     import Distributions: fit
     import StatsBase: coef, coeftable, confint, deviance, loglikelihood, nobs,
