@@ -1,17 +1,17 @@
 abstract NLregModF{T<:FP}
 
 ## default methods for all NLregModF objects
-covariatemat(m::NLregModF)      = m.x
-expctd(m::NLregModF)            = m.mu
-model_response(m::NLregModF)    = m.y
-nobs(m::NLregModF)              = length(model_response(m))
-npars(m::NLregModF)             = size(tgrad(m),1)
-mufunc(m::NLregModF)            = m.f
-residuals(m::NLregModF)         = m.resid
-Base.size(m::NLregModF)         = size(tgrad(m))
+Base.size(m::NLregModF) = size(tgrad(m))
 Base.size(m::NLregModF,args...) = size(tgrad(m),args...)
-tgrad(m::NLregModF)             = m.tgrad # transposed gradient matrix
-unscaledvcov(m::NLregModF)      = inv(cholfact(tgrad(m) * tgrad(m)'))
+StatsBase.model_response(m::NLregModF) = m.y
+StatsBase.nobs(m::NLregModF) = length(model_response(m))
+StatsBase.residuals(m::NLregModF) = m.resid
+covariatemat(m::NLregModF) = m.x
+expctd(m::NLregModF) = m.mu
+mufunc(m::NLregModF) = m.f
+npars(m::NLregModF) = size(tgrad(m),1)
+tgrad(m::NLregModF) = m.tgrad # transposed gradient matrix
+unscaledvcov(m::NLregModF) = inv(cholfact(tgrad(m) * tgrad(m)'))
 
 ## update the expected response and residuals, returning the sum of squared residuals
 function updtmu!(m::NLregModF, pars::Vector)
@@ -54,10 +54,11 @@ end
 abstract PLregModF{T<:FP} <: NLregModF{T}
 
 ## default methods for all PLregModF objects
-mmjac(m::PLregModF)             = m.MMD # model-matrix derivative (Jacobian)
-mmfunc(m::PLregModF)            = m.mmf # model-matrix update function
-Base.size(m::PLregModF)         = size(mmjac(m))
+Base.size(m::PLregModF) = size(mmjac(m))
 Base.size(m::PLregModF,args...) = size(mmjac(m),args...)
+StatsBase.model_response(m::PLregModF) = m.y
+mmfunc(m::PLregModF) = m.mmf # model-matrix update function
+mmjac(m::PLregModF) = m.MMD # model-matrix derivative (Jacobian)
 
 ## update the (transposed) model matrix for the linear parameters and the gradient MMD
 function updtMM!(m::PLregModF,nlpars)

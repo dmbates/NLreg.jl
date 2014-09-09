@@ -1,23 +1,17 @@
-using DataFrames, RDatasets, NumericExtensions, GLM
-import Distributions.fit, Base.show, GLM.deviance, GLM.nobs
-import NumericExtensions: evaluate, result_type
+using DataFrames, RDatasets
 
 abstract NLregMod{T<:FloatingPoint}     # nonlinear regression model
-
-## abstract NLRegJac <: NonlinearRegModel  # nonlinear regression model with Jacobian
-
-## abstract NLRegFD <: NonlinearRegModel   # finite-difference nonlinear regression model
 
 type MicMen{T<:FloatingPoint} <: NLregMod{T}
     conc::Vector{T}
 end
 MicMen{T<:FloatingPoint}(c::DataArray{T,1}) = MicMen(vector(c))
 
-type fMicMen <: BinaryFunctor end
-evaluate{T<:FloatingPoint}(::fMicMen,x::T,K::T) = x/(K+x)
-result_type{T<:FloatingPoint}(::fMicMen,::Type{T},::Type{T}) = T
+type fMicMen <: Base.Func{2} end
+Base.evaluate{T<:FloatingPoint}(::fMicMen,x::T,K::T) = x/(K+x)
+#result_type{T<:FloatingPoint}(::fMicMen,::Type{T},::Type{T}) = T
     
-nobs(m::MicMen) = length(m.conc)
+StatsBase.nobs(m::MicMen) = length(m.conc)
 pnames(m::MicMen) = ["Vm", "K"]
 nlinpars(m::MicMen) = 1
 function modelmat!{T<:FloatingPoint}(mm::Matrix{T},m::MicMen{T},nlpars::StridedVector{T})
@@ -57,7 +51,7 @@ function plinear{T<:FloatingPoint}(m::NLregMod{T},y::Vector{T})
 end
 plinear{T<:FloatingPoint}(m::NLregMod{T}, y::DataArray{T,1}) = plinear(m,vector(y))
 
-function deviance{T<:FloatingPoint}(pl::plinear{T},nlpars::Vector{T})
+function StatsBase.deviance{T<:FloatingPoint}(pl::plinear{T},nlpars::Vector{T})
     m = pl.m; nl = size(pl.mm,2); # number of conditionally linear parameters
     lin = 1:nl; nonlin = nl + (1:(length(pnames(m)) - nl))
     copy!(sub(pl.pars, nlin), nlpars)   # record the current values
@@ -68,18 +62,6 @@ function deviance{T<:FloatingPoint}(pl::plinear{T},nlpars::Vector{T})
     LAPACK.gemqrt!('L','N',pl.vs,pl.tr,pl.mu)
     sqdiffsum(pl.y,pl.mu)
 end
-          
-## function expctd!{T<:FloatingPoint}(mu::Vector{T},m::MicMen{T},pars::Vector{T})
-##     Vm = pars[1]; K = pars[2]
-##     for i in 1:nobs(m)
-##         ci = m.conc[i]
-##         mu[i] = Vm * ci/(K + ci)
-##     end
-##     mu
-## end
-## function elCol(x::Array,i::Integer)
-##     isa(x,Vector) ? x[i] : (isa(x,Matrix) ? x[i,:] : error("x not Vector or Matrix"))
-## end
 
 abstract Ptransform
 
@@ -115,15 +97,15 @@ type OralSd1Vkka{T<:FloatingPoint} <: NLRegFD
     time::Vector{T}
     dose::Float64
 end
-nobs(m::OralSd1Vkka) = length(m.time)
+StatsBase.nobs(m::OralSd1Vkka) = length(m.time)
 pnames(m::OralSd1Vkka) = ["V","k","ka"]
 
 # Evaluation functor.  Result should be multiplied by dose/V
-type fOralSd1kka <: TernaryFunctor end
-function evaluate{T<:FloatingPoint}(::fOralSd1kka,t::T,k::T,ka::T)
+type fOralSd1kka <: Base.Func{3} end
+function Base.evaluate{T<:FloatingPoint}(::fOralSd1kka,t::T,k::T,ka::T)
     ka*(exp(-k*t)-exp(-ka*t))/(ka-k)
 end
-result_type{T<:FloatingPoint}(::fOralSd1kka,::Type{T},::Type{T},::Type{T}) = T
+#result_type{T<:FloatingPoint}(::fOralSd1kka,::Type{T},::Type{T},::Type{T}) = T
 
 
 function expctd!{T<:FloatingPoint}(mu::Vector{T},m::OralSd1Vkka,x::Array{T})
@@ -135,7 +117,7 @@ type OralSd1VClka <: NLRegFD
     dose::Float64
 end
 OralSd1VClka(time::Vector{Float64}) = OralSd1VClka(time,1.) # default is unit dose
-nobs(m::OralSd1VClka) = length(m.time)
+StatsBase.nobs(m::OralSd1VClka) = length(m.time)
 pnames(m::OralSd1VClka) = ["V","Cl","ka"]
 npar(m::NonlinearRegModel) = length(pnames(m))
 
@@ -267,7 +249,7 @@ function gnfit(nl::NonlinearLS)          # Gauss-Newton nonlinear least squares
     nl
 end
 
-function show(io::IO, nl::NonlinearLS)
+function Base.show(io::IO, nl::NonlinearLS)
     gnfit(nl)
     n,p = size(nl.jacob)
     s2 = nl.rss/float(n-p)

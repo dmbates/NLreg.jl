@@ -1,13 +1,13 @@
 abstract NLMM{T<:FP} <: StatisticalModel
 
-model_response(nm::NLMM) = model_response(nlregmod(nm))
-residuals(nm::NLMM) = residuals(nlregmod(nm))
+StatsBase.model_response(nm::NLMM) = model_response(nlregmod(nm))
+StatsBase.residuals(nm::NLMM) = residuals(nlregmod(nm))
 pnames(nm::NLMM) = pnames(nlregmod(nm))
 npars(nm::NLMM) = npars(nlregmod(nm))
-df_residual(nm::NLMM) = nobs(nm) - npars(nm)
+StatsBase.df_residual(nm::NLMM) = nobs(nm) - npars(nm)
 
 ## returns the coefficient table
-function coeftable(nm::NLMM)
+function StatsBase.coeftable(nm::NLMM)
     pp = coef(nm); se = stderr(nm); tt = pp ./ se
     CoefTable(hcat(pp, se, tt, ccdf(FDist(1, df_residual(nm)), abs2(tt)))
               ["Estimate","Std.Error","t value", "Pr(>|t|)"],
@@ -47,7 +47,7 @@ function setpars!{T<:FP}(nm::NLMM{T},pars::Vector{T})
     nm
 end
     
-function fit(nm::NLMM; verbose=false)
+function StatsBase.fit(nm::NLMM; verbose=false)
     pnls!(nm; verbose=verbose)
     u0 = copy(nm.u)
     th = theta(nm); nth = length(th)
@@ -82,10 +82,10 @@ function fit(nm::NLMM; verbose=false)
     nm
 end
 
-function scale(nm::NLMM, sqr=false)
+function Base.scale(nm::NLMM, sqr=false)
     ssqr = pwrss(nm)/nobs(nm)
     sqr ? ssqr : sqrt(ssqr)
 end
 
-vcov(nm::NLMM) = scale(nm,true) * unscaledvcov(nlregmod(nm))
+StatsBase.vcov(nm::NLMM) = scale(nm,true) * unscaledvcov(nlregmod(nm))
     

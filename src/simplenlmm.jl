@@ -40,7 +40,7 @@ function SimpleNLMM(nl::Union(PLinearLS,NonlinearLS),inds::Vector,ltype::DataTyp
     SimpleNLMM(deepcopy(nl.m),inds,lambda,coef(nl))
 end
 
-coef(nm::SimpleNLMM) = copy(nm.beta)
+StatsBase.coef(nm::SimpleNLMM) = copy(nm.beta)
 
 nlregmod(nm::SimpleNLMM) = nm.m
 
@@ -88,7 +88,7 @@ function incr!{T<:FP}(nm::SimpleNLMM{T}, fac::T)
 end
 
 ## evaluate the approximate deviance using adaptive Gauss-Hermite quadrature
-function deviance{T<:FP}(nm::SimpleNLMM{T})
+function StatsBase.deviance{T<:FP}(nm::SimpleNLMM{T})
     nm.nAGQ == 1 || error("General adaptive Gauss-Hermite quadrature not yet written")
     n = nobs(nm)
     ldL2(nm) + n * (one(T) + log(2pi*prss!(nm)/n))
@@ -116,7 +116,7 @@ function pnls!{T<:FP}(nm::SimpleNLMM{T},u0::Matrix{T};verbose=false)
 end
 pnls!{T<:FP}(nm::SimpleNLMM{T};verbose=true) = pnls!(nm, zeros(T,size(nm.u));verbose=verbose)
 
-function show(io::IO, m::SimpleNLMM)
+function Base.show(io::IO, m::SimpleNLMM)
     mm = nlregmod(m)
     mstr = m.nAGQ == 1 ? "Laplace approximation" : "adaptive Gauss-Hermite quadrature ($(m.nAGQ))"
     println(io, "Simple, nonlinear mixed-effects model fit by ", mstr)
@@ -142,4 +142,4 @@ function show(io::IO, m::SimpleNLMM)
     println(io)
 end
 
-std(nm::SimpleNLMM) = scale(nm) * [diag(nm.lambda),1.]
+Base.std(nm::SimpleNLMM) = scale(nm) * [diag(nm.lambda),1.]

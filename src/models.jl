@@ -38,7 +38,7 @@ end
 ### Michaelis-Menten model for enzyme kinetics
 formula(::MicMen) = :(Vm*x/(K+x))
 pnames(::MicMen) = [:Vm, :K, :x]
-Base.size(::MicMen) = (1,1,1)
+dim(::MicMen) = (1,1,1)
 
 function MicMenmmf(nlp,x,tg,MMD)
     @inbounds begin
@@ -51,14 +51,14 @@ end
 function initpars(m::MicMen)
     x = vec(m.x); y = m.y
     length(y) < 2 && return [one(eltype(y))]
-    cc = linreg(rcp(x), rcp(y))
+    cc = linreg(map(inv,x), map(inv,y))
     [cc[2] / cc[1]]
 end
 
 ### Asymptotic Regression model
 formula(::AsympReg) = :(Asym + (Asym - R0)*exp(-rc*x))
 pnames(::AsympReg) = [:Asym,:R0,:rc,:x]
-Base.size(::AsympReg) = (2,1,1) # conditionally linear, nonlinear, covariates
+dim(::AsympReg) = (2,1,1) # conditionally linear, nonlinear, covariates
 
 function AsympRegmmf(nlp,x,tg,MMD)
     x1 = x[1]
@@ -68,13 +68,14 @@ end
 
 function initpars(m::AsympReg)
     y = m.y
-    [abs(linreg(vec(m.x), log((y-minimum(y))+range(y)/4))[2])]
+    mn,mx = extrema(y)
+    [abs(linreg(vec(m.x), log(y - mn + (mx-mn)/4.))[2])]
 end
 
 ### Asymptotic Regression model constrained to pass through the origin
 formula(::AsympOrig) = :(Asym*(1 - exp(-rc*x)))
 pnames(::AsympOrig) = [:Asym,:rc,:x]
-Base.size(::AsympOrig) = (1,1,1)
+dim(::AsympOrig) = (1,1,1)
 
 function AsympOrigmmf(nlp,x,tg,MMD)
     x1 = x[1] 
@@ -84,14 +85,15 @@ end
 
 function initpars(m::AsympOrig)
     y = m.y
-    A0 = maximum(y) + range(y)/4
+    mn,mx = extrema(y)
+    A0 = mx + (mx-mn)/4.
     [abs(mean(log(1 - y/A0) ./ vec(m.x)))]
 end
 
 ### Asymptotic Regression model expressed with an offset in x
 formula(::AsympOff) = :(Asym*(1-exp(-rc*(x-c0))))
 pnames(::AsympOff) = [:Asym,:c0,:rc,:x]
-Base.size(::AsympOff) = (1,2,1)
+dim(::AsympOff) = (1,2,1)
 
 function AsympOffmmf(nlp,x,tg,MMD)
     tg[1] = 1 - (eKx = exp(-(K = nlp[2])*(x1 = x[1] - nlp[1])))
@@ -108,7 +110,7 @@ end
 ### Bolus single dose in measured compartment
 formula(::BolusSD1) = :(V*exp(-K*x))
 pnames(::BolusSD1) = [:V,:K,:x]
-Base.size(::BolusSD1) = (1,1,1)
+dim(::BolusSD1) = (1,1,1)
 
 function BolusSD1mmf(nlp,x,tg,MMD)
     x1 = x[1]
@@ -125,7 +127,7 @@ end
 ### 3-parameter Logistic
 formula(::Logis3P) = :(Asym/(1 + exp(-(x-xmid)/scal)))
 pnames(::Logis3P) = [:Asym,:xmid,:scal,:x]
-Base.size(::Logis3P) = (1,2,1)
+dim(::Logis3P) = (1,2,1)
 
 function Logis3Pmmf(nlp,x,tg,MMD)
     scal = nlp[2]
@@ -148,7 +150,7 @@ end
 ### 4-parameter Logistic 
 formula(::Logis4P) = :(A + (B-A)/(1 + exp(-(x-xmid)/scal)))
 pnames(::Logis4P) = [:A,:B,:xmid,:scal,:x]                  
-Base.size(::Logis3P) = (2,2,1)
+dim(::Logis3P) = (2,2,1)
 
 function Logis4Pmmf(nlp,x,tg,MMD)
     scal = nlp[2]
@@ -171,7 +173,7 @@ end
 ### Biexponential
 formula(::Biexp) = :(A1 * exp(-K1*x) + A2 * exp(-K2*x))
 pnames(::Biexp) = [:A1,:A2,:K1,:K2,:x]
-Base.size(::Biexp) = (2,2,1)
+dim(::Biexp) = (2,2,1)
 function Biexpmmf(nlp,x,tg,MMD)
     x1 = x[1]
     tg[1] = eK1 = exp(-nlp[1]*x1)
@@ -197,7 +199,7 @@ end
 
 formula(::Gompertz) = :(Asym*exp(-b2*b3^x))
 pnames(::Gompertz) = [:Asym,:a,:b,:x]
-Base.size(::Gompertz) = (1,2,1)
+dim(::Gompertz) = (1,2,1)
 function Gompertzmmf(nlp,x,tg,MMD)
     x1 = x[1]
     a = nlp[1]
@@ -210,7 +212,7 @@ end
 
 formula(::Chwirut) = :(R0*exp(-rc*x)/1+m*x)
 pnames(::Chwirut) = [:R0,:rc,:m,:x]
-Base.size(::Chwirut) = (1,2,1)
+dim(::Chwirut) = (1,2,1)
 function Chwirutmmf(nlp,x,tg,MMD)
     x1 = x[1]
     et = exp(-nlp[1]*x1)

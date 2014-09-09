@@ -17,7 +17,7 @@ ptran(cm::CompositeModF) = cm.pt
 
 pnames(cm::CompositeModF) = pnames(ptran(cm), pnames(nlmod(cm)))
 
-residuals(cm::CompositeModF) = residuals(cm.nm)
+StatsBase.residuals(cm::CompositeModF) = residuals(cm.nm)
 
 function updtmu!(cm::CompositeModF,pars::Vector)
     length(pars) == npars(cm) || throw(DimensionMismatch(""))
@@ -56,7 +56,7 @@ end
 
 mmjac(cp::CompositePLModF) = mmjac(plmod(cp))
 
-model_response(cp::CompositePLModF) = model_response(plmod(cp))
+StatsBase.model_response(cp::CompositePLModF) = model_response(plmod(cp))
 
 npars(cp::CompositePLModF) = npars(cp.plm)
 
@@ -71,7 +71,7 @@ end
 
 ptran(cp::CompositePLModF) = cp.pt
 
-residuals(cp::CompositePLModF) = residuals(cp.plm)
+StatsBase.residuals(cp::CompositePLModF) = residuals(cp.plm)
 
 Base.size(cp::CompositePLModF) = size(plmod(cp))
 
