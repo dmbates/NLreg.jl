@@ -1,4 +1,82 @@
-abstract NLregModF{T<:FP}
+struct NLregModel{T<:AbstractFloat} <: StatisticalModel
+    f::Function
+    φ::Vector{T}
+    y::Vector{T}
+    data::AbstractDataFrame
+    res::MutableDiffResult
+    cfg::JacobianConfig
+end
+
+function NLregModel(model, data, y, φ)
+    n = length(y)
+    if size(data, 1) ≠ n
+        throw(ArgumentError("size(data, 1) = $(size(data, 1)) ≠ length(y) = $n"))
+    end
+    f(φ) = model(φ, data)
+    NLregModel(f, φ, y, data, JacobianResult(y, φ), JacobianConfig(f, φ))
+end
+
+"""
+    decrement!(δ, res, y)
+
+Evaluates the negative of the increment (i.e. the decrement) in `δ` from
+the negative residual and the Jacobian in `res`, which is overwritten in
+the process.  Returns the residual sum of squares and the convergence
+criterion.
+"""
+function decrement!(δ, res)
+    negativeresid = res.value
+    rss = sum(abs2, negativeresid)
+    qrfac = qr!(res.derivs[1])
+    lmul!(qrfac.Q', negativeresid)
+    copyto!(δ, 1, negativeresid, 1, length(δ))
+    cvg = sum(abs2, δ) / rss
+    ldiv!(UpperTriangular(qrfac.R), δ)
+    rss, sqrt(cvg)
+end
+
+function fit!(m::NLregModel; verbose=false, tol=0.00001, minstep=0.001, maxiter=100)
+    data = m.data
+    φ = m.φ
+    f = m.f
+    y = m.y
+    cfg = m.cfg
+    res = jacobian!(m.res, f, φ, cfg)
+    δ = similar(φ)
+    trialpars = similar(δ)
+    oldrss, cvg = decrement!(δ, res)
+    verbose && @show cvg, oldrss, φ
+    iter = 1
+    while cvg > tol && iter ≤ maxiter
+        step = 1.0        # step factor
+        @. trialpars = φ - step * δ
+        jacobian!(res, f, trialpars, cfg)
+        res.value .-= y   # replace the fitted values with the negative residual
+        rss = sum(abs2, res.value)
+        while rss > oldrss && step ≥ minstep  # step-halving to ensure reduction of rss
+            step /= 2
+            @. trialpars = φ - step * δ
+            jacobian!(res, f, trialpars, cfg)
+            res.value .-= y
+            rss = sum(abs2, res.value)
+        end
+        if step < minstep
+            throw(ErrorException("Step factor reduced below minstep of $minstep"))
+        end
+        copyto!(φ, trialpars)
+        rss, cvg = decrement!(δ, res)
+        iter += 1
+        oldrss = rss
+        verbose && @show cvg, oldrss, φ
+    end
+    if iter > maxiter
+        throw(ErrorException("Maximum number of iterations, $maxiter, exceeded"))
+    end
+    m
+end
+
+#=
+abstract type NLregModF{T<:AbstractFloat}
 
 ## default methods for all NLregModF objects
 Base.size(m::NLregModF) = size(tgrad(m))
@@ -124,3 +202,4 @@ function updtmu!(m::PLregModF,pars::Matrix,inds::Vector)
     end
     rss
 end
+=#
