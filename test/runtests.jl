@@ -8,9 +8,12 @@ function sdOral1C(φ, data)
     @. (data.dose/V) * (ka/(ka - k)) * (exp(-k*t) - exp(-ka*t))
 end
 
-const Theo = CSV.read(joinpath(dirname(pathof(NLreg)),"..", "data","Theophylline.csv"))
+const Theo = CSV.read(joinpath(dirname(pathof(NLreg)),"..", "data","Theophylline.csv"));
 
-m1 = fit!(NLregModel(sdOral1C, Theo, copy(Theo.conc), [-2.5, 0.5, -1.0]))
+m1 = fit!(NLregModel(sdOral1C, Theo, copy(Theo.conc), (lk = -2.5, lka = 0.5, lCl = -1.0)))
+
+params(m1)
+
 #=
 @test_approx_eq coef(pl) [1.1429558452268844,-1.4036989045425874]
 

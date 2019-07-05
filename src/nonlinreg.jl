@@ -1,19 +1,24 @@
-struct NLregModel{T<:AbstractFloat} <: StatisticalModel
+struct NLregModel{N,T<:AbstractFloat} <: StatisticalModel
     f::Function
+    pnms::NTuple{N,Symbol}
     φ::Vector{T}
     y::Vector{T}
+    R::UpperTriangular{T,Matrix{T}}
     data::AbstractDataFrame
     res::MutableDiffResult
     cfg::JacobianConfig
 end
 
-function NLregModel(model, data, y, φ)
+function NLregModel(model, data, y, β::NamedTuple)
     n = length(y)
     if size(data, 1) ≠ n
         throw(ArgumentError("size(data, 1) = $(size(data, 1)) ≠ length(y) = $n"))
     end
+    φ = collect(β)
+    k = length(β)
     f(φ) = model(φ, data)
-    NLregModel(f, φ, y, data, JacobianResult(y, φ), JacobianConfig(f, φ))
+    NLregModel(f, keys(β), φ, y, UpperTriangular(similar(φ, k, k)), data,
+        JacobianResult(y,φ), JacobianConfig(f,φ))
 end
 
 """
@@ -38,26 +43,26 @@ end
 function fit!(m::NLregModel; verbose=false, tol=0.00001, minstep=0.001, maxiter=100)
     data = m.data
     φ = m.φ
+    δ = similar(φ)
     f = m.f
     y = m.y
     cfg = m.cfg
-    res = jacobian!(m.res, f, φ, cfg)
-    δ = similar(φ)
-    trialpars = similar(δ)
+    res = m.res
+    jacobian!(m.res, f, φ, cfg).value .-= y # evaluate negative residual and Jacobian
+    res.value .-= y
     oldrss, cvg = decrement!(δ, res)
     verbose && @show cvg, oldrss, φ
+    trialpars = similar(δ)
     iter = 1
     while cvg > tol && iter ≤ maxiter
-        step = 1.0        # step factor
+        step = 1.0                    # step factor
         @. trialpars = φ - step * δ
-        jacobian!(res, f, trialpars, cfg)
-        res.value .-= y   # replace the fitted values with the negative residual
+        jacobian!(res, f, trialpars, cfg).value .-= y
         rss = sum(abs2, res.value)
         while rss > oldrss && step ≥ minstep  # step-halving to ensure reduction of rss
             step /= 2
             @. trialpars = φ - step * δ
-            jacobian!(res, f, trialpars, cfg)
-            res.value .-= y
+            jacobian!(res, f, trialpars, cfg).value .-= y
             rss = sum(abs2, res.value)
         end
         if step < minstep
@@ -72,9 +77,15 @@ function fit!(m::NLregModel; verbose=false, tol=0.00001, minstep=0.001, maxiter=
     if iter > maxiter
         throw(ErrorException("Maximum number of iterations, $maxiter, exceeded"))
     end
+    copyto!(m.R.data, view(res.derivs[1], 1:length(φ), :))
+    jacobian!(res, f, φ, cfg)
     m
 end
 
+Base.size(m::NLregModel) = size(m.res.derivs[1])
+fitted(m::NLregModel) = m.res.value
+residuals(m::NLregModel) = m.y - fitted(m)
+params(m::NLregModel{K,T}) where {K,T} = NamedTuple{m.pnms, NTuple{K,T}}(m.φ)
 #=
 abstract type NLregModF{T<:AbstractFloat}
 
