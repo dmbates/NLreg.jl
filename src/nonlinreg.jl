@@ -9,12 +9,13 @@ struct NLregModel{N,T<:AbstractFloat} <: StatisticalModel
     cfg::JacobianConfig
 end
 
-function NLregModel(model, data, y, β::NamedTuple)
+function NLregModel(model::Function, data, β::NamedTuple, ynm::Symbol=:y)
+    φ = collect(β)
+    y = convert(typeof(φ), data[ynm])
     n = length(y)
     if size(data, 1) ≠ n
         throw(ArgumentError("size(data, 1) = $(size(data, 1)) ≠ length(y) = $n"))
     end
-    φ = collect(β)
     k = length(β)
     f(φ) = model(φ, data)
     NLregModel(f, keys(β), φ, y, UpperTriangular(similar(φ, k, k)), data,
@@ -83,63 +84,42 @@ function fit!(m::NLregModel; verbose=false, tol=0.00001, minstep=0.001, maxiter=
 end
 
 Base.size(m::NLregModel) = size(m.res.derivs[1])
+coef(m::NLregModel) = m.φ
+coefnames(m::NLregModel) = m.pnms
+function coeftable(m::NLregModel)
+    φ = m.φ
+    σ = stderror(m)
+    CoefTable([φ, σ, φ ./ σ], ["Estimate","Std.Error","t value"],
+        collect(String.(m.pnms)), 0, 3)
+end
+deviance(m::NLregModel) = rss(m)
+dof(m::NLregModel{K}) where {K} = K
+dof_residual(m::NLregModel{K}) where {K} = length(m.y) - K
 fitted(m::NLregModel) = m.res.value
-residuals(m::NLregModel) = m.y - fitted(m)
+islinear(m::NLregModel) = false
+function loglikelihood(m::NLregModel)
+    n = nobs(m)
+    -n * (1. + log(2π * rss(m)/n)) / 2
+end
+nobs(m::NLregModel) = length(m.y)
 params(m::NLregModel{K,T}) where {K,T} = NamedTuple{m.pnms, NTuple{K,T}}(m.φ)
+residuals(m::NLregModel) = m.y .- fitted(m)
+response(m::NLregModel) = m.y
+rss(m::NLregModel) = sum(abs2, m.y .- fitted(m))
+function Base.show(io::IO, m::NLregModel)
+    println(io, "Nonlinear regression model (NLregModel)")
+    println(io)
+    println(io, " Residual sum of squares: ", deviance(m))
+    println(io)
+    println(io, coeftable(m))
+end
+
+function vcov(m::NLregModel)
+    Rinv = inv(m.R)
+    Rinv * Rinv' .* (rss(m)/dof_residual(m))
+end
+
 #=
-abstract type NLregModF{T<:AbstractFloat}
-
-## default methods for all NLregModF objects
-Base.size(m::NLregModF) = size(tgrad(m))
-Base.size(m::NLregModF,args...) = size(tgrad(m),args...)
-StatsBase.model_response(m::NLregModF) = m.y
-StatsBase.nobs(m::NLregModF) = length(model_response(m))
-StatsBase.residuals(m::NLregModF) = m.resid
-covariatemat(m::NLregModF) = m.x
-expctd(m::NLregModF) = m.mu
-mufunc(m::NLregModF) = m.f
-npars(m::NLregModF) = size(tgrad(m),1)
-tgrad(m::NLregModF) = m.tgrad # transposed gradient matrix
-unscaledvcov(m::NLregModF) = inv(cholfact(tgrad(m) * tgrad(m)'))
-
-## update the expected response and residuals, returning the sum of squared residuals
-function updtmu!(m::NLregModF, pars::Vector)
-    length(pars) == npars(m) || throw(DimensionMismatch(""))
-    f  = mufunc(m)
-    mu = expctd(mu)
-    r  = residuals(m)
-    tg = tgrad(m)
-    x  = covariatemat(m)
-    y  = model_response(m)
-    for i in 1:length(y)
-        mu[i] = f(pars,view(x,:,i),view(tgrad,:,i)) # pass subarrays by reference, not copies
-        r[i] = y[i] - mu[i]
-        rss += abs2(r[i])
-    end
-    rss
-end
-
-function updtmu!(m::NLregModF, pars::Matrix, inds::Vector)
-    (n == nobs(m)) == length(inds) && size(pars,1) == npars(m) || throw(DimensionMismatch(""))
-    f  = mufunc(m)
-    mu = expctd(mu)
-    r  = residuals(m)
-    tg = tgrad(m)
-    x  = covariatemat(m)
-    y  = model_response(m)
-    ii = 0; rss = zero(eltype(mu))
-    for i in 1:n
-        if ii != inds[i]
-            ii = inds[i]
-            pp = view(pars,:,ii)
-        end
-        mu[i] = f(pp,view(x,:,i),view(tgrad,:,i))
-        r[i]  = y[i] - mu[i]
-        rss  += abs2(r[i])
-    end
-    rss
-end
-
 abstract PLregModF{T<:FP} <: NLregModF{T}
 
 ## default methods for all PLregModF objects
