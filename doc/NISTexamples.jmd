@@ -1,0 +1,150 @@
+
+# Examples of nonlinear regression models from NIST
+
+The U.S. National Institute of Standards and Technology (NIST) produced a set of reference examples for nonlinear regression routines.  These data sets and models are documented in the `NISTnls` package for [`R`](https://cloud.R-project.org).
+
+```julia
+using CSV, DataFrames, DataFramesMeta, Gadfly, NLreg
+```
+
+```julia
+datadir = joinpath(dirname(pathof(NLreg)), "..", "data");
+```
+
+### Bennett5
+
+```julia
+b5 = CSV.read(joinpath(datadir, "Bennett5.csv"))
+```
+
+```julia
+plot(b5, x=:x, y=:y)
+```
+
+```julia
+b5m = fit!(NLregModel((x,data)->@.(x[1]*(x[2]+data.x)^(-1/x[3])), b5, (b1=-2000., b2=50., b3=0.8)))
+```
+
+### Chwirut1
+
+```julia
+cw1 = CSV.read(joinpath(datadir, "Chwirut1.csv"))
+plot(cw1, x = "x", y = "y")
+```
+
+```julia
+cw1m = fit!(NLregModel((φ,data)->@.(exp(-φ[1]*data.x)/(φ[2]+φ[3]*data.x)), cw1, (b1=0.1, b2 = 0.01, b3 = 0.01)), verbose=true)
+```
+
+### Chwirut2
+
+```julia
+cw2 = CSV.read(joinpath(datadir, "Chwirut2.csv"))
+plot(cw2, x = :x, y = :y)
+```
+
+```julia
+cw2m = fit!(NLregModel((φ,data)->@.(exp(-φ[1]*data.x)/(φ[2]+φ[3]*data.x)), cw2, (b1=0.15, b2 = 0.008, b3 = 0.01)), verbose=true)
+```
+
+```julia
+m1 = fit!(NLregModel((x,data)->@.(exp(-x[1]*data.x)/(x[2] + x[3]*data.x)), cw2, (φ₁ = 0.15, φ₂ = 0.008, φ₃ = 0.01)))
+```
+
+### DanielWood
+
+```julia
+dw = CSV.read(joinpath(datadir, "DanielWood.csv"))
+plot(dw, x=:x, y=:y)
+```
+
+```julia
+dwm = fit!(NLregModel((p,d)->@.(p[1]*d.x^p[2]), dw, (b1=0.7, b2=4.0)))
+```
+
+```julia
+MichaelisMenten(x, data) = @.(x[1]*data.Conc/(x[2] + data.Conc))
+```
+
+```julia
+Puromycin = dataset("datasets", "Puromycin");
+purtrt = @where(Puromycin, :State .== "treated")
+plot(purtrt, x = :Conc, y = :Rate)
+```
+
+```julia
+pm1 = fit!(NLregModel(MichaelisMenten, purtrt, (Vm = 200., K = 0.05), :Rate))
+```
+
+```julia
+puruntrt = @where(Puromycin, :State .== "untreated")
+plot(puruntrt, x = :Conc, y = :Rate)
+```
+
+```julia
+@time pm2 = fit!(NLregModel(MichaelisMenten, puruntrt, (Vm = 200., K = 0.05), :Rate))
+```
+
+```julia
+fits = [fit!(NLregModel(MichaelisMenten, sfr, (Vm = 200., K = 0.05), :Rate)) for sfr in groupby(Puromycin, :State)]
+```
+
+```julia
+const Theo = CSV.read(joinpath(datadir, "Theophylline.csv"))
+```
+
+```julia
+function sdOral1C(φ, data)
+    k  = exp(φ[1])    # elimination rate constant from lk
+    ka = exp(φ[2])    # absorption rate constant from lka
+    V  = exp(φ[3])    # volume of distribution from lV
+    t  = data.time
+    @. (data.dose/V) * (ka/(ka - k)) * (exp(-k*t) - exp(-ka*t))
+end
+```
+
+```julia
+fit!(NLregModel(sdOral1C, @where(Theo, :Subj .== "S03"), (lk=-2.5,lka=0.5,lV=-1.0), :conc), verbose=true)
+```
+
+```julia
+for sdf in groupby(Theo, :Subj)
+    println(sdf.Subj[1])
+    try
+        println(fit!(NLregModel(sdOral1C, sdf, (lk=-2.5,lka=0.5,lV=-1.0), :conc)))
+    catch
+    end
+end
+```
+
+```julia
+Indometh = CSV.read("../data/Indometh.csv")
+```
+
+```julia
+plot(Indometh, x = :time, y = :conc, xgroup=:subject, Geom.subplot_grid(Geom.point))
+```
+
+## Examples from Chapter 8 of Pinheiro and Bates (2000)
+
+Import the data on Orange tree growth
+
+```julia
+Orange = CSV.read(joinpath(datadir, "../data/Orange.csv"), pool=true)
+```
+
+An initial fit of the logistic growth model grouping all the trees together is
+
+```julia
+logisgrowth(p,d) = @.(p[1]/(1+exp(-(d.age - p[2])/p[3])));
+```
+
+```julia
+m1 = fit!(NLregModel(logisgrowth, Orange, (Asym=170.,xmid=800., scal=500.), :circumference))
+```
+
+Separate models for each tree are fit by
+
+```julia
+m2 = [fit!(NLregModel(logisgrowth, sdf, (Asym=192.7, xmid=728.7, scal=353.5), :circumference)) for sdf in groupby(Orange, :tree)]
+```
