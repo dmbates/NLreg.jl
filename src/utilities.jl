@@ -6,4 +6,5 @@ function all_names!(v::Set{Symbol}, expr::Expr)
     end
     v
 end
+all_names!(v::Set{Symbol}, expr::Real) = v 
 all_names(expr::Expr) = all_names!(Set{Symbol}(), expr)
