@@ -1,5 +1,5 @@
 using BlockArrays, CSV, DataFrames, ForwardDiff, LinearAlgebra
-using DiffResults: MutableDiffResult
+using ForwardDiff.DiffResults: MutableDiffResult
 using ForwardDiff: JacobianConfig
 using StatsBase: StatisticalModel
 
@@ -9,10 +9,12 @@ struct NLmixedModel{N,T<:AbstractFloat} <: StatisticalModel
     φ::Vector{T}
     b::Matrix{T}
     λ::LowerTriangular{T,Matrix{T}}
+    pars::Vector{T}
     L11::Vector{Matrix{T}}
     L21::Matrix{T}
     L22::Matrix{T}
     reinds::Vector{Int}
+    residuals::Vector{Vector{T}}
     data::GroupedDataFrame
     Rdf::Ref
     ynm::Symbol
@@ -27,6 +29,7 @@ function NLmixedModel(model::Function, data::GroupedDataFrame, ynm::Symbol,
     Rdf = Ref(first(data))
     f(x) = model(x, Rdf[])
     res = [DiffResults.JacobianResult(sdf[ynm], φ) for sdf in data]
+    residuals = [copy(r.value) for r in res]
     cfg = ForwardDiff.JacobianConfig(f, φ)
     for (r, sdf) in zip(res, data)
         Rdf[] = sdf
@@ -43,7 +46,8 @@ function NLmixedModel(model::Function, data::GroupedDataFrame, ynm::Symbol,
     L21 = zeros(T, k+1, j*m)
     L22 = zeros(T, k+1, k+1)
     b = zeros(j, m)
-    NLmixedModel(f, pnms, φ, b, λ, L11, L21, L22, reindsu, data, Rdf, ynm, res, cfg)
+    NLmixedModel(f, pnms, φ, b, λ, copy(φ), L11, L21, L22, 
+        reindsu, residuals, data, Rdf, ynm, res, cfg)
 end
 
 NLmixedModel(m::Function, d::GroupedDataFrame, nm::Symbol, β::NamedTuple) = 
@@ -52,15 +56,27 @@ NLmixedModel(m::Function, d::GroupedDataFrame, nm::Symbol, β::NamedTuple) =
 function updateμ!(mod::NLmixedModel)
     f = mod.f
     φ = mod.φ
+    b = mod.b
+    ynm = mod.ynm
     cfg = mod.cfg
-    for (r, sdf) in zip(mod.res, mod.data)
+    pars = mod.pars
+    reinds = mod.reinds
+    rss = zero(eltype(φ))
+    for (r, sdf, resid, j) in zip(mod.res, mod.data, mod.residuals, eachindex(mod.res))
         mod.Rdf[] = sdf
-        ForwardDiff.jacobian!(r, f, φ, cfg)
+        copyto!(pars, φ)
+        for (i, k) in enumerate(reinds)
+            pars[k] += b[i, j]
+        end
+        ForwardDiff.jacobian!(r, f, pars, cfg)
+        @. resid = sdf[ynm] - r.value
+        rss += sum(abs2, resid)
     end
-    mod
+    rss
 end
 
 function updateL!(mod::NLmixedModel{N,T}) where {N,T}
+    rss = updateμ!(mod)
     λ = mod.λ
     L21 = fill!(mod.L21, zero(T))
     L22 = fill!(mod.L22, zero(T))
@@ -71,22 +87,18 @@ function updateL!(mod::NLmixedModel{N,T}) where {N,T}
     dind = diagind(first(L11))
     XtX = view(L22, 1:N, 1:N)
     rtX = view(L22, m, 1:N)
-    rss = zero(T)
     cols = 1:nre
-    for (r, df, L) in zip(mod.res, mod.data, mod.L11)
-        rv = r.value
-        map!(-, rv, df[mod.ynm], rv) # evaluate residual in r.value
-        rss += sum(abs2, rv)
+    for (r, df, L, resid) in zip(mod.res, mod.data, mod.L11, mod.residuals)
         rd = r.derivs[1]
         BLAS.syrk!('L', 'T', one(T), rd, one(T), XtX)
-        BLAS.gemv!('T', one(T), rd, rv, one(T), rtX)
+        BLAS.gemv!('T', one(T), rd, resid, one(T), rtX)
         lmul!(λ', rmul!(mul!(L, rd', rd), λ))
         for i in dind
             L[i] += one(T)
         end
         ch = cholesky!(Symmetric(L, :L)).L
         mul!(view(L21, 1:N, cols), rd', rd)
-        mul!(view(L21, N+1, cols), rd', rv)
+        mul!(view(L21, N+1, cols), rd', resid)
         rdiv!(rmul!(view(L21, :, cols), λ), ch')
         cols = cols .+ nre
     end
@@ -97,6 +109,7 @@ function updateL!(mod::NLmixedModel{N,T}) where {N,T}
 end
 
 function fullL(mod::NLmixedModel{N,T}) where {N,T}
+    rss = updateμ!(mod)
     L11 = mod.L11
     L21 = mod.L21
     m, n = size(L21)
@@ -105,10 +118,8 @@ function fullL(mod::NLmixedModel{N,T}) where {N,T}
     Xcols = (1:N) .+ n
     XtX = view(val, Xcols, Xcols)
     rtX = view(val, size(val, 1), Xcols)
-    rss = zero(T)
     cols = 1:k
-    for (r, df) in zip(mod.res, mod.data)
-        resid = map!(-, r.value, df[mod.ynm], r.value)
+    for (r, df, resid) in zip(mod.res, mod.data, mod.residuals)
         jacobian = r.derivs[1]
         dblk = view(val, cols, cols)  # diagonal block
         mul!(dblk, jacobian', jacobian)
@@ -117,7 +128,6 @@ function fullL(mod::NLmixedModel{N,T}) where {N,T}
         mul!(lblk, jacobian', resid)
         BLAS.syrk!('L', 'T', one(T), jacobian, one(T), XtX)
         BLAS.gemv!('T', one(T), jacobian, resid, one(T), rtX)
-        rss += sum(abs2, resid)
         cols = cols .+ k
     end
     LinearAlgebra.copytri!(val, 'L')
@@ -131,3 +141,22 @@ function fullL(mod::NLmixedModel{N,T}) where {N,T}
     Λ, Symmetric(val, :L)
 end
 
+nlower(n) = (n * (n + 1)) >> 1
+
+function getθ!(v::AbstractVector{T}, λ::LowerTriangular{T}) where {T}
+    n = LinearAlgebra.checksquare(λ)
+    if length(v) ≠ nlower(n)
+        throw(DimensionMismatch("length(v) = $(length(v)) should be $(nlower(n))"))
+    end
+    ind = 1
+    for j in 1:n
+        for i in j:n
+            v[ind] = λ[i, j]
+            ind += 1
+        end
+    end
+    v
+end
+
+getθ(λ::LowerTriangular{T}) where {T} = 
+    getθ!(Vector{T}(undef, nlower(LinearAlgebra.checksquare(λ))), λ)

@@ -8,7 +8,8 @@ function sdOral1C(φ, data)
     @. (data.dose/V) * (ka/(ka - k)) * (exp(-k*t) - exp(-ka*t))
 end
 
-const Theo = CSV.read(joinpath(dirname(pathof(NLreg)),"..", "data","Theophylline.csv"));
+const datadir = normpath(joinpath(dirname(pathof(NLreg)), "..", "data"))
+const Theo = CSV.read(joinpath(datadir, "Theophylline.csv"));
 
 m1 = fit!(NLregModel(sdOral1C, Theo, (lk = -2.5, lka = 0.5, lV = -1.0), :conc));
 
