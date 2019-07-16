@@ -9,9 +9,9 @@ struct NLmixedModel{N,T<:AbstractFloat} <: StatisticalModel
     φ::Vector{T}
     φ₀::Vector{T}
     δ::Vector{T}
-    b::Matrix{T}
-    b₀::Matrix{T}
-    δb::Matrix{T}
+    u::Matrix{T}
+    u₀::Matrix{T}
+    δu::Matrix{T}
     λ::LowerTriangular{T,Matrix{T}}
     pars::Vector{T}
     L11::Vector{Matrix{T}}
@@ -27,7 +27,7 @@ struct NLmixedModel{N,T<:AbstractFloat} <: StatisticalModel
 end
 
 function NLmixedModel(model::Function, data::GroupedDataFrame, ynm::Symbol,
-    β::NamedTuple, reinds::Vector{Int})
+        β::NamedTuple, reinds::Vector{Int})
     φ = float(collect(β))
     T = eltype(φ)
     Rdf = Ref(first(data))
@@ -50,7 +50,7 @@ function NLmixedModel(model::Function, data::GroupedDataFrame, ynm::Symbol,
     L21 = zeros(T, k+1, j*m)
     L22 = zeros(T, k+1, k+1)
     b = zeros(j, m)
-    NLmixedModel(f, pnms, φ, copy(φ), similar(φ), b, copy(b), similar(b), λ, copy(φ),
+    NLmixedModel(f, pnms, φ, copy(φ), zeros(T, k), b, copy(b), zeros(T, size(b)), λ, copy(φ),
         L11, L21, L22, reindsu, residuals, data, Rdf, ynm, res, cfg)
 end
 
@@ -59,42 +59,60 @@ NLmixedModel(m::Function, d::GroupedDataFrame, nm::Symbol, β::NamedTuple) = NLm
 """
     fullL(mod::NLmixedModel)
 
-Update `mod.res` and `mod.residuals` and return the full lower triangular `Λ` and the full `A`
+Return the full lower triangular `Λ`, and the full lower Cholesky factor, `L`
 
 Used for checking the values calculated in `updateL`.
 """
 function fullL(mod::NLmixedModel{N,T}) where {N,T}
-    rss = updateμ!(mod)
     L11 = mod.L11
     L21 = mod.L21
     m, n = size(L21)
-    val = zeros(T, m + n, m + n)
+    valsz = m + n
+    val = zeros(T, valsz, valsz)
     k = size(first(L11), 1)
     Xcols = (1:N) .+ n
     XtX = view(val, Xcols, Xcols)
     rtX = view(val, size(val, 1), Xcols)
     cols = 1:k
-    for (r, df, resid) in zip(mod.res, mod.data, mod.residuals)
+    for (r, resid) in zip(mod.res, mod.residuals)
         jacobian = r.derivs[1]
-        dblk = view(val, cols, cols)  # diagonal block
-        mul!(dblk, jacobian', jacobian)
+        dblk = view(val, cols, cols)          # diagonal block
+        mul!(dblk, jacobian', jacobian)       # N.B. only works if mod.reinds == 1:k
         copyto!(view(val, Xcols, cols), dblk)
-        lblk = view(val, size(val, 1), cols)
-        mul!(lblk, jacobian', resid)
+        mul!(view(val, size(val, 1), cols), jacobian', resid)
         BLAS.syrk!('L', 'T', one(T), jacobian, one(T), XtX)
         BLAS.gemv!('T', one(T), jacobian, resid, one(T), rtX)
         cols = cols .+ k
     end
+    val[end, end] = 
     LinearAlgebra.copytri!(val, 'L')
-    val[end, end] = rss
     Λ = LowerTriangular(kron(Diagonal(ones(length(L11))), mod.λ))
     lmul!(Λ', view(val, 1:n, :))
     rmul!(view(val, :, 1:n), Λ)
     for j in 1:n
         val[j, j] += 1
     end
-    Λ, Symmetric(val, :L)
+    u = mod.u
+    for j in eachindex(u)
+        val[valsz, j] -= u[j]
+    end
+    A = Symmetric(val, :L)
+    Λ, A, cholesky(A).L
 end
+
+"""
+    dispersion(m::NLmixedModel, sqr::Bool=false)
+
+Return the estimate of the dispersion parameter, σ, or its square, if `sqr` is `true`.
+Note: this is the maximum likelihood estimate.  The denominator is the number of observations.
+"""
+function dispersion(m::NLmixedModel, sqr::Bool=false)
+    resid = m.residuals
+    val = (sum(abs2, m.u) + sum(r -> sum(abs2, r), resid)) / sum(length, resid)
+    sqr ? val : sqrt(val)
+end
+
+dof_residual(m::NLmixedModel) = sum(length, m.residuals)  # we're using mle's
 
 """
     getθ!(v, λ::LowerTriangular)
@@ -136,74 +154,92 @@ Base.getproperty(mod::NLmixedModel, s::Symbol) = s == :θ ? getθ(mod) : getfiel
 """
     increment!(mod::NLmixedModel)
 
-Overwrite the `δ` and `δb` fields on `mod` with the current increments from `L21` and `L22`.
+Overwrite the `δ` and `δu` fields on `mod` with the current increments from `L21` and `L22`.
 """
 function increment!(mod::NLmixedModel{N,T}) where {N,T}
     δ = mod.δ
-    δb = mod.δb
+    δu = mod.δu
     L11 = mod.L11
     L21 = mod.L21
     L22 = mod.L22
-    λ = mod.λ
-    ngrps = length(mod.L11)
-    nre = size(λ, 1)
     m, n = size(L21)
     copyto!(δ, view(L22, m, 1:N))
-    ldiv!(LowerTriangular(view(mod.L22, 1:N, 1:N)), δ)
-    mul!(vec(δb), view(L21, 1:N, :)', δ)
-    for i in eachindex(δb)
-        δb[i] = L21[m, i] - δb[i]
+    ldiv!(LowerTriangular(view(mod.L22, 1:N, 1:N))', δ)
+    mul!(vec(δu), view(L21, 1:N, :)', δ)
+    for i in eachindex(δu)
+        δu[i] = L21[m, i] - δu[i]
     end
     for (j, L) in enumerate(L11)
-        lmul!(λ, ldiv!(LowerTriangular(L)', view(δb, :, j)))
+        ldiv!(LowerTriangular(L)', view(δu, :, j))
     end
     mod
 end
 
-"""
-    pnls(m::NLmixedModel; verbose=false, tol=0.00001, minstep=0.001, maxiter=500)
+function LinearAlgebra.logdet(m::NLmixedModel)
+    L11 = m.L11
+    dind = diagind(first(L11))
+    sum(L -> sum(log(L[j]) for j in dind), L11)
+end 
 
-Optimize the penalized residual sum of squares w.r.t `m.φ` and `m.b`
 """
-function pnls!(m::NLmixedModel; verbose=false, tol=0.00001, minstep=0.001, maxiter=500)
+    objective(m::NLmixedModel)
+
+Return the Laplace approximation to negative twice the log-likelihood.  Assumes `m.res`,
+`m.residuals` and `m.L11` have been updated (via `updateμ!` and `updateL`) to the current
+`m.φ` and `m.u`.
+"""
+function objective(m::NLmixedModel)
+    L11 = m.L11
+    dind = diagind(first(L11))
+    logdet(m) + dof_residual(m)*(1 + log(2π * dispersion(m, true)))
+end
+
+"""
+    pnls!(m::NLmixedModel; verbose=false, tol=1.0e-9, minstep=0.001, maxiter=500)
+
+Optimize the penalized residual sum of squares w.r.t `m.φ` and `m.u`
+"""
+function pnls!(m::NLmixedModel; verbose=false, tol=1.0e-9, minstep=0.001, maxiter=500)
+    oldprss = updateμ!(m)
     cvg = updateL!(m)
-    increment!(m)
     φ = m.φ
-    φ₀ = copyto!(m.φ₀, φ)    
-    b = m.b
-    b₀ = copyto!(m.b₀, b)
-    verbose && @show cvg, oldrss, φ
-    trialpars = similar(δ)
+    φ₀ = copyto!(m.φ₀, φ)
+    δ = m.δ
+    u = m.u
+    u₀ = copyto!(m.u₀, u)
+    δu = m.δu
+    verbose && @show cvg, oldprss, φ
     iter = 1
     while cvg > tol && iter ≤ maxiter
+        increment!(m)
         step = 1.0                    # step factor
-        @. trialpars = φ - step * δ
-        jacobian!(res, f, trialpars, cfg).value .-= y
-        rss = sum(abs2, res.value)
-        while rss > oldrss && step ≥ minstep  # step-halving to ensure reduction of rss
+        @. φ = φ₀ + δ
+        @. u = u₀ + δu
+        prss = updateμ!(m)
+        while prss > oldprss && step ≥ minstep  # step-halving to ensure reduction of rss
             step /= 2
-            @. trialpars = φ - step * δ
-            jacobian!(res, f, trialpars, cfg).value .-= y
-            rss = sum(abs2, res.value)
+            @. φ = φ₀ + step * δ
+            @. u = u₀ + step * δu
+            prss = updateμ!(m)
         end
         if step < minstep
             throw(ErrorException("Step factor reduced below minstep of $minstep"))
         end
-        copyto!(φ, trialpars)
-        rss, cvg = decrement!(δ, res)
+        copyto!(φ₀, φ)
+        copyto!(u₀, u)
+        cvg = updateL!(m)
+        increment!(m)
         iter += 1
-        oldrss = rss
-        verbose && @show cvg, oldrss, φ
+        oldprss = prss
+        verbose && @show cvg, oldprss, φ
     end
     if iter > maxiter
         throw(ErrorException("Maximum number of iterations, $maxiter, exceeded"))
     end
-    copyto!(m.R.data, view(res.derivs[1], 1:length(φ), :))
-    jacobian!(res, f, φ, cfg)
     m
 end
 
-Base.propertynames(mod::NLmixedModel) = push!(collect(fieldnames(NLMixedModel)), :θ)
+Base.propertynames(mod::NLmixedModel) = push!(collect(fieldnames(NLmixedModel)), :θ)
 
 """
     setθ!(λ::LowerTriangular, v)
@@ -238,28 +274,32 @@ setproperty!(mod::NLregModel, s::Symbol, x) = s == :θ ? setθ!(mod, x) : setfie
 """
     updateμ!(mod::NLmixedModel)
 
-Update `mod.res`, containing the fitted values and the Jacobians, and `mod.residuals`
+Update `mod.res`, containing the fitted values and the Jacobians, and `mod.residuals`.
+Returns the penalized residual sum of squares.
 """
-function updateμ!(mod::NLmixedModel, step)
+function updateμ!(mod::NLmixedModel)
     f = mod.f
     φ = mod.φ
-    b = mod.b
+    u = mod.u
     ynm = mod.ynm
     cfg = mod.cfg
     pars = mod.pars
     reinds = mod.reinds
-    rss = zero(eltype(φ))
+    λ = mod.λ
+    prss = sum(abs2, u)
+    b = similar(φ, length(reinds))
     for (r, sdf, resid, j) in zip(mod.res, mod.data, mod.residuals, eachindex(mod.res))
-        mod.Rdf[] = sdf
+        lmul!(λ, copyto!(b, view(u, :, j)))
         copyto!(pars, φ)
         for (i, k) in enumerate(reinds)
-            pars[k] += b[i, j]
+            pars[k] += b[i]
         end
+        mod.Rdf[] = sdf
         ForwardDiff.jacobian!(r, f, pars, cfg)
         @. resid = sdf[ynm] - r.value
-        rss += sum(abs2, resid)
+        prss += sum(abs2, resid)
     end
-    rss
+    prss
 end
 
 """
@@ -268,19 +308,18 @@ end
 Update `mod.L11`, `mod.L21`, and `mod.L22`, returning the convergence criterion.
 """
 function updateL!(mod::NLmixedModel{N,T}) where {N,T}
-    rss = updateμ!(mod)
+    u = mod.u
     λ = mod.λ
     L21 = fill!(mod.L21, zero(T))
     L22 = fill!(mod.L22, zero(T))
-    ngrps = length(mod.data)
     m, n = size(L21)
     L11 = mod.L11
-    nre = size(first(L11), 1)
+    nre = size(λ, 1)
     dind = diagind(first(L11))
     XtX = view(L22, 1:N, 1:N)
     rtX = view(L22, m, 1:N)
     cols = 1:nre
-    for (r, df, L, resid) in zip(mod.res, mod.data, mod.L11, mod.residuals)
+    for (r, df, L, resid, j) in zip(mod.res, mod.data, mod.L11, mod.residuals, eachindex(mod.res))
         rd = r.derivs[1]
         BLAS.syrk!('L', 'T', one(T), rd, one(T), XtX)
         BLAS.gemv!('T', one(T), rd, resid, one(T), rtX)
@@ -290,11 +329,16 @@ function updateL!(mod::NLmixedModel{N,T}) where {N,T}
         end
         ch = cholesky!(Symmetric(L, :L)).L
         mul!(view(L21, 1:N, cols), rd', rd)
+        allrows = view(L21, :, cols)
         mul!(view(L21, N+1, cols), rd', resid)
-        rdiv!(rmul!(view(L21, :, cols), λ), ch')
+        rmul!(allrows, λ)
+        for (i, c) in enumerate(cols)
+            L21[N+1, c] -= u[i,j]
+        end
+        rdiv!(allrows, ch')
         cols = cols .+ nre
     end
-    L22[end,end] = rss
+    L22[end,end] = sum(abs2, u) + sum(r -> sum(abs2, r), mod.residuals)
     BLAS.syrk!('L', 'N', -one(T), L21, one(T), L22)
     cholesky!(Symmetric(L22, :L))
     (sum(abs2, view(L21, m, :)) + sum(abs2, view(L22, m, 1:N))) / abs2(L22[m,m])
