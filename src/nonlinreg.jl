@@ -49,14 +49,13 @@ function fit!(m::NLregModel; verbose=false, tol=0.00001, minstep=0.001, maxiter=
     y = m.y
     cfg = m.cfg
     res = m.res
-    jacobian!(m.res, f, φ, cfg).value .-= y # evaluate negative residual and Jacobian
-    res.value .-= y
+    jacobian!(m.res, f, φ, cfg).value .-= y   # evaluate negative residuals and Jacobian
     oldrss, cvg = decrement!(δ, res)
     verbose && @show cvg, oldrss, φ
     trialpars = similar(δ)
     iter = 1
     while cvg > tol && iter ≤ maxiter
-        step = 1.0                    # step factor
+        step = 1.0                            # step factor
         @. trialpars = φ - step * δ
         jacobian!(res, f, trialpars, cfg).value .-= y
         rss = sum(abs2, res.value)
