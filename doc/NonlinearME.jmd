@@ -1,0 +1,347 @@
+
+# Nonlinear mixed-effects models in Julia
+
+## Linear mixed-effects models
+
+A linear mixed-effects model is characterized by the distribution of
+two vector-valued random variables: the $n$-dimensional response, $Y$,
+and the $q$-dimensional random effects vector, $B$.  The unconditional
+distribution of $B$ is multivariate normal
+$$
+    B\sim N(0,\Sigma_\theta)
+$$
+as is the conditional distribution of $Y$ given $B=b$
+$$
+    (Y|B=b)\sim N(X\beta+Zb, \sigma^2 I)
+$$
+
+In the [MixedModels](https://github.com/dmbates/MixedModels) package for 
+[Julia](http://julialang.org) we represent the covariance matrix in the unconditional distribution of $B$ as
+$$
+    \Sigma_\theta=\sigma^2\Lambda_\theta\Lambda_\theta'
+$$
+where $\Lambda_\theta$ is the $q\times q$ _relative covariance factor_.
+
+For given values of $\theta$ and $\beta$ we solve a penalized linear least squares problem of the form
+$$
+    r^2_{\beta,\theta}=\min_u \|(y-X\beta)-Z\Lambda_\theta u\|^2 + \|u\|^2
+$$
+for which we compute the sparse Cholesky factorization
+$$
+    L_\theta L_\theta' = \Lambda_\theta'Z'Z\Lambda_\theta + I
+$$
+where $L_\theta$ is a lower-triangular sparse matrix.
+Because $L_\theta$ is triangular, we can easily evaluate its determinant as the product of its diagonal elements.
+By construction these diagonal elements are positive and the log-determinant, $\log(|\Lambda_\theta'Z'Z\Lambda_\theta + I|)=2\log(|L_\theta|)$ is easily evaluated.
+
+The log-likelihood for a linear mixed-effects model, $\ell(\beta,\theta|y)$, can be expressed as
+$$
+    -2\ell(\beta,\theta|y) = \log(|\Lambda_\theta'Z'Z\Lambda_\theta + I|)+n\left[1+\log\left(\frac{2\pi r^2_{\beta,\theta}}{n}\right)\right]
+$$
+
+## Nonlinear mixed-effects models
+
+The formulation of a nonlinear mixed-effects model (NLMM) is nearly the same as that of an LMM except that the mean of the conditional distribution $Y|B=b$ is a nonlinear function of the parameters $\beta$ and the random effects, $b$ or, equivalently, the _spherical_ random effects $u$ where $b=\Lambda_\theta u$.
+
+The nonlinear model function, $f$, is a function of a $k$-dimensional model parameter, $\phi$ and covariates. In our formulation we write the `vec` of the $n\times k$ _model parameter matrix_, $\Phi$ as a linear predictor
+$$
+    vec(\Phi)=X\beta+Z\Lambda_\theta u
+$$
+and evaluate
+$$
+    \mu_{Y|U=u}=f(T,\Phi)
+$$
+where $T$ is a matrix of covariate values, _time_ in the case of a population pharmacokinetic model.
+
+The penalized linear least squares (PLS) problem solved for each evaluation of the objective in the case of a linear mixed-effects model is replaced by a penalized nonlinear least squares (PNLS) problem
+$$
+    r^2_{\beta,\theta}=\min_u \|y-\mu_{Y|U=u}\|^2+\|u\|^2
+$$
+in an NLMM.  
+The optimizer, $\tilde{u}=\arg\min_u r^2_{\beta,\theta}$, is the _mode_ of the distribution of $U$ given $Y=y$ and the current values of the parameters, $\beta$ and $\theta$.
+
+In general there will not be a closed-form expression for the log-likelihood.  However, the _Laplace approximation_ to the log-likelihood is exactly the same expression as the log-likelihood for an LMM. The Laplace approximation is equivalent to a one-point adaptive Gauss-Hermite approximation to the integral that defines the log-likelihood.  This approximation is _adaptive_ in the sense that the Gauss-Hermite approximation is taken at the mode of the conditional distribution, not at the mean of the unconditional distribution.
+
+## A simple example - first-order kinetics, 1 compartment, single bolus unit dose
+
+One of the simplest pharmacokinetics models is that for a one compartment model with a single bolus dose.
+The predicted concentration at time $t$ is given by
+$$
+        c(t)=V\exp(-Kt)
+$$
+where V is the volume of distribution and K is the elimination rate constant.
+
+## Fitting the model
+
+Simulated data from a one compartment model with a single bolus dose are provided in a compressed `csv` file in the `data` directory of the `NLreg` package.  We read these data as a `DataFrame` object.
+
+```julia
+using CSV, DataFrames, LinearAlgebra, NLreg
+const datadir = normpath(joinpath(dirname(pathof(NLreg)), "..", "data"));
+```
+
+```julia
+sd1 = CSV.read(joinpath(datadir, "sd1.csv"));
+describe(sd1)
+```
+
+To fit all the data, without taking the different subjects into account, with parameters representing `log(V)` and `log(K)`, use a `NLregModel`.
+The first argument is a function of parameters, `p`, and a data table (in the sense of the [`Tables` package](https://github.com/JuliaData/Tables.jl) ), `d`, that evaluates the mean response vector.  Usually the expression to evaluate the response is a call to the `@.` macro for implicit broadcasting.  The [`ForwardDiff` package](https://github.com/JuliaDiff/ForwardDiff.jl) is used with this function to evaluate the Jacobian matrix along with the mean response.  Subsequent arguments are the data, starting values for the parameters, as a `NamedTuple`, and a symbol giving the name of the response column in the data table.
+
+```julia
+mfixed = fit!(NLregModel((p,d) -> @.(exp(p[1] - exp(p[2])*d.time)), sd1, (lV = -1.0, lK = -1.0), :conc), verbose=true)
+```
+
+The parameter estimates from this fit provide starting estimates for the fixed-effects in a nonlinear mixed-effects model
+
+```julia
+mmixed = NLmixedModel((p,d) -> @.(exp(p[1] - exp(p[2])*d.time)), groupby(sd1, :id), :conc, params(mfixed));
+```
+
+The relative covariance factor, $\lambda$, has been initialized to the identity.
+
+```julia
+mmixed.λ
+```
+
+corresponding to a $\theta$ parameter of
+
+```julia
+mmixed.θ
+```
+
+The _penalized nonlinear least squares_ (pnls) algorithm minimizes $\|y-\eta(\varphi,\mathbf{u})\|^2 + \|\mathbf{u}\|^2$ with respect to $\varphi$ and $\mathbf{u}$
+
+```julia
+pnls!(mmixed, verbose=true);
+```
+
+At the minimum, the Laplace approximation to negative twice the log-likelihood is
+
+```julia
+objective(mmixed)
+```
+
+and the conditional modes of the spherical random effects are
+
+```julia
+mmixed.u
+```
+
+The objective is evaluated just as for the linear mixed-effects model
+$$
+    -2\ell(\theta|y) = \log(|\Lambda_\theta'Z'Z\Lambda_\theta + I|)+n\left[1+\log\left(\frac{2\pi r^2_{\theta}}{n}\right)\right]
+$$
+where the first term, the logarithm of the determinant, whose value is
+
+```julia
+logdet(mmixed)
+```
+
+is evaluated from the Cholesky factor of $\Lambda_\theta'Z'Z\Lambda_\theta + I$.
+This is a block-diagonal positive-definite symmetric matrix consisting of 200 diagonal blocks of size $2\times2$.
+The lower Cholesky factors of each block are in the `L11` field of the `NLmixedModel` object.
+
+```julia
+typeof(mmixed.L11)
+```
+
+```julia
+LowerTriangular(first(mmixed.L11))
+```
+
+Now all that is needed is to optimize the objective with respect to $\theta$ subject to the constraint that the elements of $\theta$ corresponding to diagonal
+elements of $\lambda$ are non-negative.
+
+```julia
+using NLopt
+opt = NLopt.Opt(:LN_BOBYQA, 3)
+min_objective!(opt, (x, g) -> objective(pnls!(NLreg.setθ!(mmixed, x))))
+lower_bounds!(opt, [0.0, -Inf, 0.0])
+optf, optx, ret = optimize(opt, [1.0, 0.0, 1.0])
+```
+
+The estimate of the fixed-effects parameter is
+
+```julia
+mmixed.φ
+```
+
+The conditional mode of the "spherical" random effects is
+
+```julia
+mmixed.u
+```
+
+or, on the original scale of `log(V)` and `log(K)`
+
+```julia
+mmixed.λ * mmixed.u
+```
+
+The estimate, $\hat{\sigma}$ of the standard deviation of the per-observation error is
+
+```julia
+dispersion(mmixed)
+```
+
+which is the penalized residual sum of squares divided by the number of observations.
+
+To evaluate the standard deviations of the within-subject random effects, it helps first to evaluate the row lengths of $\lambda$
+
+```julia
+rowlengths = [norm(view(mmixed.λ, i, 1:i)) for i in 1:size(mmixed.λ, 1)]
+```
+
+From this vector the estimated standard deviations of the random effects are evaluated as
+
+```julia
+dispersion(mmixed) .* rowlengths
+```
+
+and the within-subject correlation matrix as
+
+```julia
+rhofac = ldiv!(Diagonal(rowlengths), copy(mmixed.λ));
+rhofac * rhofac'
+```
+
+## Examples from chapter 8 of Pinheiro and Bates (Springer, 2000)
+
+### Orange Tree Growth
+
+```julia
+Orange = CSV.read(joinpath(datadir, "Orange.csv"));
+describe(Orange)
+```
+
+Define the logistic growth model in terms of three parameters, `Asym`, the upper asymptote, `xmid`, the `x` value at which the predicted response is `Asym/2`, and `scal`, the horizontal scale factor.  See appendix C.7 and Figure C.7, p. 519.
+
+```julia
+logisgrowth(p, d) = @.(p[1]/(1+exp(-(d.age - p[2]) / p[3])));
+```
+
+```julia
+ofixed = fit!(NLregModel(logisgrowth, Orange, (Asym = 200., xmid = 700., scal = 350.), :circumference), verbose=true)
+```
+
+```julia
+omixed = NLmixedModel(logisgrowth, groupby(Orange, :tree), :circumference, params(ofixed));
+objective(pnls!(omixed, verbose=true))
+```
+
+```julia
+opt = NLopt.Opt(:LN_BOBYQA, 6)
+obj(x, g) = objective(pnls!(NLreg.setθ!(omixed, x)))
+min_objective!(opt, obj)
+lower_bounds!(opt, [0.0, -Inf, -Inf, 0.0, -Inf, 0.0])
+optf, optx, ret = optimize(opt, omixed.θ)
+```
+
+Notice that the estimated covariance of the random-effects is essentially singular.
+
+```julia
+omixed.λ
+```
+
+In, fact the covariance matrix for the random effect is more-or-less a rank 1 matrix, instead of rank 3.
+This should not be surprising because there is only date from 5 trees.
+Expecting to estimate a total of 7 variance-covariance parameters and 3 fixed-effects parameters from data on only 5 trees is optimistic.
+
+For the record, the estimates of the fixed-effects parameters are
+
+```julia
+omixed.φ
+```
+
+and the estimate of $\sigma$ is
+
+```julia
+dispersion(omixed)
+```
+
+The modes of the spherical random effects are
+
+```julia
+omixed.u
+```
+
+or, on the original scale of `Asym`, `xmid`, and `scal`
+
+```julia
+omixed.λ * omixed.u
+```
+
+## Theophylline
+
+```julia
+Theo = CSV.read(joinpath(datadir, "Theophylline.csv"));
+describe(Theo)
+```
+
+Each subject received a single, oral dose at time 0.  A one-compartment model for these data can be expressed in terms of `lk`, the log of the elimination rate constant, `lka`, the log of the absorption rate constant, and `lV`, the log of the effective volume of distribution as
+
+```julia
+function sdOral1C(φ, data)
+    k  = exp(φ[1])    # elimination rate constant from lk
+    ka = exp(φ[2])    # absorption rate constant from lka
+    V  = exp(φ[3])    # volume of distribution from lV
+    t  = data.time
+    @. (data.dose/V) * (ka/(ka - k)) * (exp(-k*t) - exp(-ka*t))
+end
+```
+
+```julia
+tfixed = fit!(NLregModel(sdOral1C, Theo, (lk = -2.5, lka = 0.5, lV = -1.0), :conc), verbose=true)
+```
+
+```julia
+tmixed = NLmixedModel(sdOral1C, groupby(Theo, :Subj), :conc, params(tfixed));
+objective(pnls!(tmixed, verbose=true))
+```
+
+```julia
+obj(x,g) = objective(pnls!(NLreg.setθ!(tmixed, x)))
+min_objective!(opt, obj)
+optf, optx, ret = optimize(opt, tmixed.θ)
+```
+
+The value of the objective, which is on the deviance scale of negative twice the log-likelihood, corresponds to a log-likelihood of
+
+```julia
+-optf/2
+```
+
+which is essentially the same as that in Pinheiro and Bates (2000), although arrived at by a very different optimization mechanism.
+(Also, the pharmacokinetic parameters in this fit include the volume of distribution whereas the previous fit used the clearance, `Cl`, 
+which is the product of the volume of distribution and the elimination rate constant.)
+
+The estimates of the fixed-effects parameters
+
+```julia
+tmixed.φ
+```
+
+match those from the previous analysis.
+
+As for model `omixed` the estimate of the covariance matrix of the random effects, based on
+
+```julia
+tmixed.λ
+```
+
+will be rank-deficient - in this case it will be rank 2.
+
+```julia
+rowlengths = [norm(view(tmixed.λ, i, 1:i)) for i in 1:3];
+dispersion(tmixed) .* rowlengths  # standard deviations of the random effects
+```
+
+and the correlation matrix is
+
+```julia
+ρfac = ldiv!(Diagonal(rowlengths), copy(tmixed.λ))
+ρfac * ρfac'
+```
+
+Note that one can't tell easily from the values in the correlation matrix that it is rank deficient.
