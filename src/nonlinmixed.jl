@@ -13,16 +13,16 @@ struct NLmixedModel{N,T<:AbstractFloat} <: StatisticalModel
     u₀::Matrix{T}
     δu::Matrix{T}
     λ::LowerTriangular{T,Matrix{T}}
-    pars::Vector{T}
+    pars::Vector{T}                  # parameter vector for evaluation of f
     L11::Vector{Matrix{T}}
     L21::Matrix{T}
     L22::Matrix{T}
     reinds::Vector{Int}
     residuals::Vector{Vector{T}}
     data::GroupedDataFrame
-    Rdf::Ref
+    Rdf::Ref                         # Ref to a subDataFrame of data
     ynm::Symbol
-    res::Vector
+    res::Vector                      # vector of DiffResults.MutableDiffResult
     cfg::JacobianConfig
 end
 
@@ -49,7 +49,7 @@ function NLmixedModel(model::Function, data::GroupedDataFrame, ynm::Symbol,
     L11 = [zeros(T, j, j) for i in 1:m]
     L21 = zeros(T, k+1, j*m)
     L22 = zeros(T, k+1, k+1)
-    b = zeros(j, m)
+    b = zeros(T, j, m)
     NLmixedModel(f, pnms, φ, copy(φ), zeros(T, k), b, copy(b), zeros(T, size(b)), λ, copy(φ),
         L11, L21, L22, reindsu, residuals, data, Rdf, ynm, res, cfg)
 end
@@ -178,7 +178,7 @@ end
 function LinearAlgebra.logdet(m::NLmixedModel)
     L11 = m.L11
     dind = diagind(first(L11))
-    sum(L -> sum(log(L[j]) for j in dind), L11)
+    2 * sum(L -> sum(log(L[j]) for j in dind), L11)
 end 
 
 """
@@ -200,27 +200,21 @@ end
 Optimize the penalized residual sum of squares w.r.t `m.φ` and `m.u`
 """
 function pnls!(m::NLmixedModel; verbose=false, tol=1.0e-9, minstep=0.001, maxiter=500)
+    u = fill!(m.u, 0)
+    u₀ = fill!(m.u₀, 0)
     oldprss = updateμ!(m)
     cvg = updateL!(m)
+    increment!(m)
     φ = m.φ
     φ₀ = copyto!(m.φ₀, φ)
-    δ = m.δ
-    u = m.u
-    u₀ = copyto!(m.u₀, u)
-    δu = m.δu
     verbose && @show cvg, oldprss, φ
     iter = 1
     while cvg > tol && iter ≤ maxiter
-        increment!(m)
-        step = 1.0                    # step factor
-        @. φ = φ₀ + δ
-        @. u = u₀ + δu
-        prss = updateμ!(m)
-        while prss > oldprss && step ≥ minstep  # step-halving to ensure reduction of rss
+        step = 1.0                              # step factor
+        prss = updateφu!(m, step)
+        while prss > oldprss && step ≥ minstep  # step-halving to ensure reduction of prss
             step /= 2
-            @. φ = φ₀ + step * δ
-            @. u = u₀ + step * δu
-            prss = updateμ!(m)
+            prss = updateφu!(m, step)
         end
         if step < minstep
             throw(ErrorException("Step factor reduced below minstep of $minstep"))
@@ -236,6 +230,9 @@ function pnls!(m::NLmixedModel; verbose=false, tol=1.0e-9, minstep=0.001, maxite
     if iter > maxiter
         throw(ErrorException("Maximum number of iterations, $maxiter, exceeded"))
     end
+    updateφu!(m, 1.0)
+    updateL!(m)
+    increment!(m)
     m
 end
 
@@ -271,6 +268,12 @@ end
 
 setproperty!(mod::NLregModel, s::Symbol, x) = s == :θ ? setθ!(mod, x) : setfield!(mod, s, x)
 
+function updateφu!(m::NLmixedModel, step)
+    @. m.φ = m.φ₀ + step * m.δ
+    @. m.u = m.u₀ + step * m.δu
+    updateμ!(m)
+end
+
 """
     updateμ!(mod::NLmixedModel)
 
@@ -283,17 +286,13 @@ function updateμ!(mod::NLmixedModel)
     u = mod.u
     ynm = mod.ynm
     cfg = mod.cfg
-    pars = mod.pars
     reinds = mod.reinds
     λ = mod.λ
+    pars = mod.pars
     prss = sum(abs2, u)
-    b = similar(φ, length(reinds))
     for (r, sdf, resid, j) in zip(mod.res, mod.data, mod.residuals, eachindex(mod.res))
-        lmul!(λ, copyto!(b, view(u, :, j)))
-        copyto!(pars, φ)
-        for (i, k) in enumerate(reinds)
-            pars[k] += b[i]
-        end
+        mul!(pars, λ, view(u, :, j))
+        @. pars += φ
         mod.Rdf[] = sdf
         ForwardDiff.jacobian!(r, f, pars, cfg)
         @. resid = sdf[ynm] - r.value
