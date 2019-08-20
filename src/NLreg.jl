@@ -12,6 +12,7 @@ export
     dispersion,
     dof,
     dof_residual,
+    fit,
     fit!,
     fitted,
     islinear,
@@ -25,8 +26,6 @@ export
     response,
     rss,
     stderror,
-    updateL!,
-    updateμ!,
     vcov
 
 include("nlreg.jl")
