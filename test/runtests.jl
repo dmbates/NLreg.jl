@@ -1,16 +1,17 @@
-using CSV, DataFrames, NLreg, StatsBase, Test
+using CSV, DataFrames, NLreg, Test
 
-function sdOral1C(φ, data)
-    k  = exp(φ[1])    # elimination rate constant from lk
-    ka = exp(φ[2])    # absorption rate constant from lka
-    V  = exp(φ[3])    # volume of distribution from lV
-    t  = data.time
-    @. (data.dose/V) * (ka/(ka - k)) * (exp(-k*t) - exp(-ka*t))
+function sdOral1Clog(p, d)
+    k  = exp(p.lk)    # elimination rate constant from lk
+    ka = exp(p.lka)    # absorption rate constant from lka
+    V  = exp(p.lV)    # volume of distribution from lV
+    t  = d.time
+    (d.dose/V) * (ka/(ka - k)) * (exp(-k*t) - exp(-ka*t))
 end
 
 const datadir = normpath(joinpath(dirname(pathof(NLreg)), "..", "data"))
 const Theo = CSV.read(joinpath(datadir, "Theophylline.csv"));
 const Orange = CSV.read(joinpath(datadir, "Orange.csv"))
+
 
 #=
 @test_approx_eq coef(pl) [1.1429558452268844,-1.4036989045425874]
