@@ -20,8 +20,6 @@ export
     mss,
     nobs,
     objective,
-    params,
-    pnls!,
     residuals,
     response,
     rss,
