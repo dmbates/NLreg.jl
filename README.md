@@ -24,9 +24,6 @@ the maximum velocity and `K`, the Michaelis parameter.  The `Vm`
 parameter occurs linearly in this expression whereas `K` is a
 nonlinear parameter.
 
-To fit such a model we create a `MicMen` object from the vector of
-observed concentrations and a `PLregFit` object from this model and
-the responses.
 ```julia
 julia> using CSV, DataFrames, NLreg
 

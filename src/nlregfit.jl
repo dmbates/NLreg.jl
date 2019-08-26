@@ -152,7 +152,7 @@ varest(nls::NLregModel) = rss(nls)/dof_residual(nls)
 
 function StatsBase.vcov(nls::NLregModel)
     Rinv = inv(nls.R)
-    varest(nls) * Rinv * Rinv'
+    lmul!(varest(nls), Rinv * Rinv')
 end
 
 function Base.show(io::IO, m::NLregModel)
@@ -164,12 +164,11 @@ function Base.show(io::IO, m::NLregModel)
     println(io)
     println(io, "Data schema (response variable is ", m.ysym, ")")
     println(io, Tables.schema(m.data))
-    println(io)
-    println(io, " Sum of squared residuals at convergence: ", rss(m))
-    println(io, " Achieved convergence criterion:          ", m.optsum[].cvg)
-    println(io)
-    println(io, " Number of observations:                  ", length(m.data))
+    println(io, "Number of observations:                  ", length(m.data))
     println(io)
     println(io, " Parameter estimates")
     show(io, coeftable(m))
+    println(io)
+    println(io, " Sum of squared residuals at convergence: ", rss(m))
+    println(io, " Achieved convergence criterion:          ", m.optsum[].cvg)
 end
