@@ -2,7 +2,7 @@
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://dmbates.github.io/NLreg.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://dmbates.github.io/NLreg.jl/dev)
-[![Build Status](https://travis-ci.com/dmbates/NLreg.jl.svg?branch=master)](https://travis-ci.com/dmbates/NLreg.jl)
+[![Build Status](https://travis-ci.org/dmbates/NLreg.jl.svg?branch=master)](https://travis-ci.org/dmbates/NLreg.jl)
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/dmbates/NLreg.jl?svg=true)](https://ci.appveyor.com/project/dmbates/NLreg-jl)
 [![Codecov](https://codecov.io/gh/dmbates/NLreg.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/dmbates/NLreg.jl)
 
