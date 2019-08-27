@@ -52,17 +52,16 @@ Tables.Schema:
  :conc   Float64
  :rate   Float64
  :state  String
+Number of observations:                  12
 
- Sum of squared residuals at convergence: 1195.4488145417758
- Achieved convergence criterion:          8.798637504793927e-6
-
- Number of observations:                  12
-
- Parameter estimates
+Parameter estimates
 ───────────────────────────────────────
       Estimate   Std.Error  t-statistic
 ───────────────────────────────────────
 Vm  212.684     6.94715        30.6145
 K     0.064121  0.00828092      7.74322
 ───────────────────────────────────────
+
+Sum of squared residuals at convergence: 1195.4488145417758
+Achieved convergence criterion:          8.798637504793927e-6
 ```
