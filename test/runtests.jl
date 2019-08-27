@@ -1,4 +1,4 @@
-using CSV, DataFrames, NLreg, Test
+using CSV, DataFrames, LinearAlgebra, NLreg, Test
 
 const datadir = normpath(joinpath(dirname(pathof(NLreg)), "..", "data"))
 
@@ -7,7 +7,19 @@ const datadir = normpath(joinpath(dirname(pathof(NLreg)), "..", "data"))
     logist(p, d) = p.Asym/(1 + exp(-(d.age - p.xmid)/p.scal))
     m1 = fit(NLregModel, first(groupby(Orange, :tree)), :circumference, logist,
         (Asym = 200., xmid = 1000., scal = 500.))
+    @test !islinear(m1)
+    @test nobs(m1) == 7
+    @test dof_residual(m1) == 4
     @test rss(m1) ≈ 176.9948616999825 rtol=1.0e-5
+    @test coef(m1) isa NamedTuple
+    @test keys(coef(m1)) == (:Asym, :xmid, :scal)
+    @test isposdef(vcov(m1))
+    iob = IOBuffer()
+    show(iob, m1)
+    @test countlines(seekstart(iob)) == 20
+    @test residuals(m1) ≈ (response(m1) - fitted(m1)) rtol = 1.0e-6
+    @test stderror(m1) ≈ [11.331891913287187, 77.43433020236614, 67.6918110976824] rtol=1.0e-5
+    @test collect(coef(m1)) ≈ [154.1632878544482, 627.1948032197138, 362.5731228723618] rtol=1.0e-5
 end
 
 @testset "Theophylline" begin
