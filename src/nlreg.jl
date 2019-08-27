@@ -4,6 +4,7 @@ struct NLregModel{T} <: RegressionModel
     model::Function
     parref::Ref{R} where {R<:NamedTuple}
     current::Vector{T}
+    former::Vector{T}
     chfac::Cholesky{T,Matrix{T}}
     R::UpperTriangular{T}
     incr::AbstractVector{T}
@@ -30,6 +31,7 @@ function NLregModel(data::Vector{<:NamedTuple}, ysym::Symbol, model::Function, p
         model,
         Ref(pars),
         current,
+        similar(current),
         chfac,
         UpperTriangular(view(fac, 1:n, 1:n)),
         view(fac, 1:n, np1),
@@ -57,11 +59,13 @@ end
 
 function StatsBase.fit!(
     nls::NLregModel{T};
-    maxiter = 200, tol = 1.0e-5, minfac = 1.0e-5, verbose = false) where {T}
+    maxiter = 200, tol = 1.0e-5, minfac = 1.0e-4, verbose = false) where {T}
     converged = false
     oldrss, cvg = updatech!(nls)
+    verbose && println("rss at starting values: ", oldrss, ", convergence criterion: ", cvg, " ", collect(nls.parref[]))
     parnms = keys(nls.parref[])
     current = nls.current
+    former = copyto!(nls.former, current)
     incr = nls.incr
     iter = 1
     while iter ≤ maxiter
@@ -72,25 +76,25 @@ function StatsBase.fit!(
         current .+= incr
         nls.parref[] = (; zip(parnms, current)...)
         rss, cvg = updatech!(nls)
-        verbose && @show(iter, rss, cvg)
+        verbose && println(lpad(string(iter), 3), ": ", rss, ", ", cvg, " ", collect(nls.parref[]))
         factor = 1.0
-        copyto!(nls.scratch, current)  # keep a copy in case of step halving
         while oldrss < rss
             factor /= 2.
             if factor < minfac
                 throw(ConvergenceException(iter, cvg, tol, "step factor: $factor"))
             end
-            copyto!(current, 1, nls.scratch, 1, length(current))
+            copyto!(current, former)
             current .+= factor .* incr
             nls.parref[] = pars = (; zip(parnms, current)...)
             rss = sum(abs2(getproperty(r, nls.ysym) - nls.model(pars, r)) for r in nls.data)
-            verbose && @show(factor, rss)
+            verbose && println(lpad(string(round(Int, log2(factor))), 5), ": ", rss)
         end
         if !isone(factor)
             rss, cvg = updatech!(nls)
         end
         oldrss = rss
         iter += 1
+        copyto!(former, current)
     end
     if !converged
         throw(ConvergenceException(iter, cvg, tol))
