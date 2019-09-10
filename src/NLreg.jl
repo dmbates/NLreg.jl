@@ -26,6 +26,6 @@ export
     stderror,
     vcov
 
-include("nlreg.jl")
+include("nlregfit.jl")
 
 end # module
