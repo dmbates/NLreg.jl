@@ -2,7 +2,7 @@
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://dmbates.github.io/NLreg.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://dmbates.github.io/NLreg.jl/dev)
-[![Build Status](https://travis-ci.com/dmbates/NLreg.jl.svg?branch=master)](https://travis-ci.com/dmbates/NLreg.jl)
+[![Build Status](https://travis-ci.org/dmbates/NLreg.jl.svg?branch=master)](https://travis-ci.org/dmbates/NLreg.jl)
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/dmbates/NLreg.jl?svg=true)](https://ci.appveyor.com/project/dmbates/NLreg-jl)
 [![Codecov](https://codecov.io/gh/dmbates/NLreg.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/dmbates/NLreg.jl)
 
@@ -24,9 +24,6 @@ the maximum velocity and `K`, the Michaelis parameter.  The `Vm`
 parameter occurs linearly in this expression whereas `K` is a
 nonlinear parameter.
 
-To fit such a model we create a `MicMen` object from the vector of
-observed concentrations and a `PLregFit` object from this model and
-the responses.
 ```julia
 julia> using CSV, DataFrames, NLreg
 
@@ -55,17 +52,16 @@ Tables.Schema:
  :conc   Float64
  :rate   Float64
  :state  String
+Number of observations:                  12
 
- Sum of squared residuals at convergence: 1195.4488145417758
- Achieved convergence criterion:          8.798637504793927e-6
-
- Number of observations:                  12
-
- Parameter estimates
+Parameter estimates
 ───────────────────────────────────────
       Estimate   Std.Error  t-statistic
 ───────────────────────────────────────
 Vm  212.684     6.94715        30.6145
 K     0.064121  0.00828092      7.74322
 ───────────────────────────────────────
+
+Sum of squared residuals at convergence: 1195.4488145417758
+Achieved convergence criterion:          8.798637504793927e-6
 ```

@@ -15,7 +15,7 @@ $$
     (Y|B=b)\sim N(X\beta+Zb, \sigma^2 I)
 $$
 
-In the [MixedModels](https://github.com/dmbates/MixedModels) package for 
+In the [MixedModels](https://github.com/dmbates/MixedModels) package for
 [Julia](http://julialang.org) we represent the covariance matrix in the unconditional distribution of $B$ as
 $$
     \Sigma_\theta=\sigma^2\Lambda_\theta\Lambda_\theta'
@@ -57,7 +57,7 @@ The penalized linear least squares (PLS) problem solved for each evaluation of t
 $$
     r^2_{\beta,\theta}=\min_u \|y-\mu_{Y|U=u}\|^2+\|u\|^2
 $$
-in an NLMM.  
+in an NLMM.
 The optimizer, $\tilde{u}=\arg\min_u r^2_{\beta,\theta}$, is the _mode_ of the distribution of $U$ given $Y=y$ and the current values of the parameters, $\beta$ and $\theta$.
 
 In general there will not be a closed-form expression for the log-likelihood.  However, the _Laplace approximation_ to the log-likelihood is exactly the same expression as the log-likelihood for an LMM. The Laplace approximation is equivalent to a one-point adaptive Gauss-Hermite approximation to the integral that defines the log-likelihood.  This approximation is _adaptive_ in the sense that the Gauss-Hermite approximation is taken at the mode of the conditional distribution, not at the mean of the unconditional distribution.
@@ -89,7 +89,7 @@ To fit all the data, without taking the different subjects into account, with pa
 The first argument is a function of parameters, `p`, and a data table (in the sense of the [`Tables` package](https://github.com/JuliaData/Tables.jl) ), `d`, that evaluates the mean response vector.  Usually the expression to evaluate the response is a call to the `@.` macro for implicit broadcasting.  The [`ForwardDiff` package](https://github.com/JuliaDiff/ForwardDiff.jl) is used with this function to evaluate the Jacobian matrix along with the mean response.  Subsequent arguments are the data, starting values for the parameters, as a `NamedTuple`, and a symbol giving the name of the response column in the data table.
 
 ```julia
-mfixed = fit!(NLregModel((p,d) -> @.(exp(p[1] - exp(p[2])*d.time)), sd1, (lV = -1.0, lK = -1.0), :conc), verbose=true)
+mfixed = fit(NLregModel, sd1, :conc, (p,d) -> p.V*exp(-p.k*d.time), (V = 1.0, k = 0.05), verbose=true)
 ```
 
 The parameter estimates from this fit provide starting estimates for the fixed-effects in a nonlinear mixed-effects model
@@ -313,7 +313,7 @@ The value of the objective, which is on the deviance scale of negative twice the
 ```
 
 which is essentially the same as that in Pinheiro and Bates (2000), although arrived at by a very different optimization mechanism.
-(Also, the pharmacokinetic parameters in this fit include the volume of distribution whereas the previous fit used the clearance, `Cl`, 
+(Also, the pharmacokinetic parameters in this fit include the volume of distribution whereas the previous fit used the clearance, `Cl`,
 which is the product of the volume of distribution and the elimination rate constant.)
 
 The estimates of the fixed-effects parameters

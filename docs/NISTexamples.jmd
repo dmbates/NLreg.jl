@@ -1,10 +1,9 @@
-
 # Examples of nonlinear regression models from NIST
 
 The U.S. National Institute of Standards and Technology (NIST) produced a set of reference examples for nonlinear regression routines.  These data sets and models are documented in the `NISTnls` package for [`R`](https://cloud.R-project.org).
 
 ```julia
-using CSV, DataFrames, DataFramesMeta, Gadfly, NLreg
+using CSV, DataFrames, Gadfly, NLreg
 ```
 
 ```julia
@@ -22,18 +21,20 @@ plot(b5, x=:x, y=:y)
 ```
 
 ```julia
-b5m = fit!(NLregModel((x,data)->@.(x[1]*(x[2]+data.x)^(-1/x[3])), b5, (b1=-2000., b2=50., b3=0.8)))
+b5m = fit(NLregModel, b5, :y, (p,data)->(p.b1*(p.b2+data.x)^(-1/p.b3)),
+  (b1=-2000., b2=50., b3=0.8))
 ```
 
 ### Chwirut1
 
 ```julia
 cw1 = CSV.read(joinpath(datadir, "Chwirut1.csv"))
-plot(cw1, x = "x", y = "y")
+plot(cw1, x = :y, y = :y)
 ```
 
 ```julia
-cw1m = fit!(NLregModel((φ,data)->@.(exp(-φ[1]*data.x)/(φ[2]+φ[3]*data.x)), cw1, (b1=0.1, b2 = 0.01, b3 = 0.01)), verbose=true)
+cw1m = fit(NLregModel, cw1, :y, (φ,data) -> exp(-φ.b1*data.x)/(φ.b2+φ.b3*data.x),
+  (b1=0.1, b2 = 0.01, b3 = 0.01), verbose=true)
 ```
 
 ### Chwirut2
@@ -44,11 +45,13 @@ plot(cw2, x = :x, y = :y)
 ```
 
 ```julia
-cw2m = fit!(NLregModel((φ,data)->@.(exp(-φ[1]*data.x)/(φ[2]+φ[3]*data.x)), cw2, (b1=0.15, b2 = 0.008, b3 = 0.01)), verbose=true)
+cw2m = fit(NLregModel, cw2, :y, (φ,data)->exp(-φ.b1*data.x)/(φ.b2+φ.b3*data.x),
+   (b1=0.15, b2 = 0.008, b3 = 0.01), verbose=true)
 ```
 
 ```julia
-m1 = fit!(NLregModel((x,data)->@.(exp(-x[1]*data.x)/(x[2] + x[3]*data.x)), cw2, (φ₁ = 0.15, φ₂ = 0.008, φ₃ = 0.01)))
+m1 = fit(NLregModel, cw2, :y, (x,data)->exp(-x.b1*data.x)/(x.b2 + x.b3*data.x),
+    (b1 = 0.15, b2 = 0.008, b3 = 0.01))
 ```
 
 ### DanielWood
@@ -59,34 +62,34 @@ plot(dw, x=:x, y=:y)
 ```
 
 ```julia
-dwm = fit!(NLregModel((p,d)->@.(p[1]*d.x^p[2]), dw, (b1=0.7, b2=4.0)))
+dwm = fit(NLregModel, dw, :y, (p,d) -> p.b1*d.x^p.b2, (b1=0.7, b2=4.0))
 ```
 
 ```julia
-MichaelisMenten(x, data) = @.(x[1]*data.Conc/(x[2] + data.Conc))
+MichaelisMenten(x, data) = x.Vm*data.conc/(x.K + data.conc)
 ```
 
 ```julia
-Puromycin = dataset("datasets", "Puromycin");
-purtrt = @where(Puromycin, :State .== "treated")
-plot(purtrt, x = :Conc, y = :Rate)
+Puromycin = CSV.read(joinpath(datadir, "Puromycin.csv"))
+purtrt = first(groupby(Puromycin, :state))
+plot(purtrt, x = :conc, y = :rate)
 ```
 
 ```julia
-pm1 = fit!(NLregModel(MichaelisMenten, purtrt, (Vm = 200., K = 0.05), :Rate))
+pm1 = fit(NLregModel, purtrt, :rate, MichaelisMenten, (Vm = 200., K = 0.05))
 ```
 
 ```julia
-puruntrt = @where(Puromycin, :State .== "untreated")
-plot(puruntrt, x = :Conc, y = :Rate)
+puruntrt = last(groupby(Puromycin, :state))
+plot(puruntrt, x = :conc, y = :rate)
 ```
 
 ```julia
-@time pm2 = fit!(NLregModel(MichaelisMenten, puruntrt, (Vm = 200., K = 0.05), :Rate))
+@time pm2 = fit(NLregModel, puruntrt, :rate, MichaelisMenten, (Vm = 200., K = 0.05))
 ```
 
 ```julia
-fits = [fit!(NLregModel(MichaelisMenten, sfr, (Vm = 200., K = 0.05), :Rate)) for sfr in groupby(Puromycin, :State)]
+fits = [fit(NLregModel, sfr, :rate, MichaelisMenten, (Vm = 200., K = 0.05)) for sfr in groupby(Puromycin, :state)]
 ```
 
 ```julia
@@ -95,30 +98,30 @@ const Theo = CSV.read(joinpath(datadir, "Theophylline.csv"))
 
 ```julia
 function sdOral1C(φ, data)
-    k  = exp(φ[1])    # elimination rate constant from lk
-    ka = exp(φ[2])    # absorption rate constant from lka
-    V  = exp(φ[3])    # volume of distribution from lV
+    k  = exp(φ.lk)    # elimination rate constant from lk
+    ka = exp(φ.lka)    # absorption rate constant from lka
+    V  = exp(φ.lV)    # volume of distribution from lV
     t  = data.time
-    @. (data.dose/V) * (ka/(ka - k)) * (exp(-k*t) - exp(-ka*t))
+    (data.dose/V) * (ka/(ka - k)) * (exp(-k*t) - exp(-ka*t))
 end
 ```
 
 ```julia
-fit!(NLregModel(sdOral1C, @where(Theo, :Subj .== "S03"), (lk=-2.5,lka=0.5,lV=-1.0), :conc), verbose=true)
+fit(NLregModel, first(groupby(Theo, :Subj)), :conc, sdOral1C, (lk=-2.5,lka=0.5,lV=-1.0), verbose=true)
 ```
 
 ```julia
 for sdf in groupby(Theo, :Subj)
     println(sdf.Subj[1])
     try
-        println(fit!(NLregModel(sdOral1C, sdf, (lk=-2.5,lka=0.5,lV=-1.0), :conc)))
+        println(fit(NLregModel, sdf, :conc, sdOral1C, (lk=-2.5,lka=0.5,lV=-1.0)))
     catch
     end
 end
 ```
 
 ```julia
-Indometh = CSV.read("../data/Indometh.csv")
+Indometh = CSV.read(joinpath(datadir, "Indometh.csv"))
 ```
 
 ```julia

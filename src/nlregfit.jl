@@ -55,10 +55,6 @@ function updatech!(nlr::NLregModel)
     ssmod + ssres, sqrt(ssmod / ssres)
 end
 
-struct IterationError <: Exception
-    msg::String
-end
-
 function StatsBase.fit!(
     nls::NLregModel{T};
     maxiter = 200, tol = 1.0e-5, minfac = 1.0e-5, verbose = false) where {T}
@@ -76,13 +72,13 @@ function StatsBase.fit!(
         current .+= incr
         nls.parref[] = (; zip(parnms, current)...)
         rss, cvg = updatech!(nls)
-        verbose && @show(i, rss, cvg)
+        verbose && @show(iter, rss, cvg)
         factor = 1.0
         copyto!(nls.scratch, current)  # keep a copy in case of step halving
         while oldrss < rss
             factor /= 2.
             if factor < minfac
-                throw(IterationError("step factor = $factor less than minimum = $minfac"))
+                throw(ConvergenceException(iter, cvg, tol, "step factor: $factor"))
             end
             copyto!(current, 1, nls.scratch, 1, length(current))
             current .+= factor .* incr
@@ -97,7 +93,7 @@ function StatsBase.fit!(
         iter += 1
     end
     if !converged
-        throw(IterationError("maximum number of iterations, $maxiter, exceeded"))
+        throw(ConvergenceException(iter, cvg, tol))
     end
     nls.optsum[] = (rss = oldrss, cvg = cvg, niter = iter)
     nls
@@ -132,12 +128,12 @@ StatsBase.dof_residual(nls::NLregModel) = nobs(nls) - length(nls.current)
 
 StatsBase.islinear(::NLregModel) = false
 
+StatsBase.nobs(nls::NLregModel) = length(nls.data)
+
 function StatsBase.fitted(nls::NLregModel)
     pars = nls.parref[]
     [nls.model(pars, d) for d in nls.data]
 end
-
-StatsBase.nobs(nls::NLregModel) = length(nls.data)
 
 function StatsBase.residuals(nls::NLregModel)
     pars = nls.parref[]
@@ -152,7 +148,7 @@ varest(nls::NLregModel) = rss(nls)/dof_residual(nls)
 
 function StatsBase.vcov(nls::NLregModel)
     Rinv = inv(nls.R)
-    varest(nls) * Rinv * Rinv'
+    lmul!(varest(nls), Rinv * Rinv')
 end
 
 function Base.show(io::IO, m::NLregModel)
@@ -164,12 +160,11 @@ function Base.show(io::IO, m::NLregModel)
     println(io)
     println(io, "Data schema (response variable is ", m.ysym, ")")
     println(io, Tables.schema(m.data))
+    println(io, "Number of observations:                  ", length(m.data))
     println(io)
-    println(io, " Sum of squared residuals at convergence: ", rss(m))
-    println(io, " Achieved convergence criterion:          ", m.optsum[].cvg)
+    println(io, "Parameter estimates")
+    println(io, coeftable(m))
     println(io)
-    println(io, " Number of observations:                  ", length(m.data))
-    println(io)
-    println(io, " Parameter estimates")
-    show(io, coeftable(m))
+    println(io, "Sum of squared residuals at convergence: ", rss(m))
+    println(io, "Achieved convergence criterion:          ", m.optsum[].cvg)
 end
