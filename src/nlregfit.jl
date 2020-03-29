@@ -1,3 +1,13 @@
+"""
+    NLregModel{T<:AbstractFloat}
+
+A representation of a nonlinear regression model.  The important fields are
+- `data`: a `Tables.RowTable` of data values
+- `ysym`: the name of the response variable in `data`, as a `Symbol`
+- `model`: a function of two arguments - parameters and data - both as `NamedTuple`s
+- `parref`: a `Ref{R} where {R<:NamedTuple}` containing the current parameter values
+- `optsum`: a `NamedTuple` of information on the optimization 
+"""
 struct NLregModel{T} <: RegressionModel
     data::Vector{S} where {S<:NamedTuple}
     ysym::Symbol
@@ -37,7 +47,7 @@ function NLregModel(data::Vector{<:NamedTuple}, ysym::Symbol, model::Function, p
         Ref((rss=-one(T), cvg=-one(T), niter=-1))
     )
 end
-
+    
 function updatech!(nlr::NLregModel)
     ch = nlr.chfac
     fac = ch.factors
@@ -140,7 +150,7 @@ function StatsBase.residuals(nls::NLregModel)
     [(getproperty(d, nls.ysym) - nls.model(pars, d)) for d in nls.data]
 end
 
-StatsBase.response(nls::NLregModel) = [getproperty(d, nls.ysym) for d in nls.data]
+StatsBase.response(nls::NLregModel) = map(Base.Fix2(getproperty, nls.ysym), nls.data)
 
 StatsBase.rss(nls::NLregModel) = nls.optsum[].rss
 

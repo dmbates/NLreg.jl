@@ -3,7 +3,7 @@
 The U.S. National Institute of Standards and Technology (NIST) produced a set of reference examples for nonlinear regression routines.  These data sets and models are documented in the `NISTnls` package for [`R`](https://cloud.R-project.org).
 
 ```julia
-using CSV, DataFrames, Gadfly, NLreg
+using CSV, DataFrames, Gadfly, NLreg, Tables
 ```
 
 ```julia
@@ -139,15 +139,15 @@ Orange = CSV.read(joinpath(datadir, "../data/Orange.csv"), pool=true)
 An initial fit of the logistic growth model grouping all the trees together is
 
 ```julia
-logisgrowth(p,d) = @.(p[1]/(1+exp(-(d.age - p[2])/p[3])));
+logisgrowth(p,d) = @.(p.Asym/(1+exp(-(d.age - p.xmid)/p.scal)));
 ```
 
 ```julia
-m1 = fit!(NLregModel(logisgrowth, Orange, (Asym=170.,xmid=800., scal=500.), :circumference))
+m1 = fit(NLregModel, Orange, :circumference, logisgrowth, (Asym=170.,xmid=800., scal=500.))
 ```
 
 Separate models for each tree are fit by
 
 ```julia
-m2 = [fit!(NLregModel(logisgrowth, sdf, (Asym=192.7, xmid=728.7, scal=353.5), :circumference)) for sdf in groupby(Orange, :tree)]
+m2 = [fit!(NLregModel(rowtable(sdf), :circumference, logisgrowth, (Asym=192.7, xmid=728.7, scal=353.5))) for sdf in groupby(Orange, :tree)]
 ```

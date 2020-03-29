@@ -1,7 +1,7 @@
-using Documenter, NLreg
+using Documenter, NLreg, StatsBase
 
 makedocs(;
-    modules=[NLreg],
+    modules=[NLreg, StatsBase],
     format=Documenter.HTML(assets=String[]),
     pages=[
         "Home" => "index.md",
